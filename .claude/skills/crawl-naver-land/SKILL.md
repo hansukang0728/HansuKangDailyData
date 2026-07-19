@@ -210,7 +210,21 @@ python3 build_dashboard.py
 트리거)이 **매일 아침 새 세션**을 띄워 아래 순서를 그대로 수행하고, 산출물을
 git에 커밋·푸시한다. Pages가 main 브랜치를 게시하므로 **push 대상은 `main`**.
 
-> **전제조건 — git 쓰기 권한**: 환경의 GitHub 연결이 쓰기 가능해야 `git push`가 된다
+> **전제조건 ① — 네트워크 정책(가장 중요)**: 크롤 대상 `fin.land.naver.com`(및 자산
+> 오리진 `financial.pstatic.net`)이 환경의 **아웃바운드 네트워크 정책에서 허용**돼야 한다.
+> 기본 제한 정책에서는 네이버가 `403 CONNECT 정책 거부`로 막혀 브라우저가
+> `net::ERR_TUNNEL_CONNECTION_FAILED`로 실패한다. 환경 생성/설정 시 네이버 호스트를
+> 허용하는 정책(사용자 지정 allowlist 또는 전체 허용)으로 만들어야 크롤이 된다.
+> 확인: `curl -sS -o /dev/null -w '%{http_code}' https://fin.land.naver.com` (200/302면 OK,
+> 000/403이면 정책 차단).
+>
+> **전제조건 ② — 브라우저 실행 경로**: 클라우드엔 chromium이 사전 설치돼 있고
+> `playwright install`은 하지 않는다. pip으로 playwright가 최신으로 올라가면 번들 버전과
+> 어긋나 실행 실패하므로, `crawl_complex.py`가 `/opt/pw-browsers/chromium`(또는 환경변수
+> `CHROMIUM_EXECUTABLE`)을 `executable_path`로 직접 지정한다(이미 구현됨). 화면이 없으니
+> `xvfb-run`으로 감싼다.
+>
+> **전제조건 ③ — git 쓰기 권한**: 환경의 GitHub 연결이 쓰기 가능해야 `git push`가 된다
 > (Contents: Read and write). 읽기 전용이면 push가 403으로 막힌다 — 그 경우 저장소
 > 소유자의 fine-grained PAT를 환경변수 `GH_PAT`로 저장해두고
 > `git push "https://x-access-token:${GH_PAT}@github.com/hansukang0728/HansuKangDailyData.git" HEAD:main`

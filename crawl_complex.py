@@ -6,6 +6,7 @@ watchlist.json에 등록된 단지 전체 또는 특정 단지 하나만 골라 
 """
 import argparse
 import json
+import os
 import time
 from contextlib import contextmanager
 from datetime import datetime
@@ -58,7 +59,15 @@ async (payload) => {
 def browser_page():
     """세션이 잡힌 지도 페이지의 Playwright page를 하나 열어 재사용할 수 있게 해준다."""
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False, args=["--disable-blink-features=AutomationControlled"])
+        # 클라우드 환경(Claude Code)에는 chromium이 사전 설치돼 있고 playwright가 pip으로
+        # 업데이트되면 번들 버전과 어긋나 "Executable doesn't exist"로 실패한다. 그래서
+        # 사전 설치된 chromium 실행파일이 있으면 그 경로를 직접 지정한다(CHROMIUM_EXECUTABLE
+        # 또는 /opt/pw-browsers/chromium 심볼릭). 로컬(경로 없음)에서는 번들 브라우저로 폴백.
+        launch_kwargs = {"headless": False, "args": ["--disable-blink-features=AutomationControlled"]}
+        chromium_exe = os.environ.get("CHROMIUM_EXECUTABLE") or "/opt/pw-browsers/chromium"
+        if os.path.exists(chromium_exe):
+            launch_kwargs["executable_path"] = chromium_exe
+        browser = p.chromium.launch(**launch_kwargs)
         context = browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
