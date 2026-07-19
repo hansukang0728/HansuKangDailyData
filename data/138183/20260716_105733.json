@@ -1,0 +1,47 @@
+[
+  {
+    "articleNumber": "2638249016",
+    "complexName": "광교센트럴뷰",
+    "dong": "6013",
+    "floorInfo": "중/25",
+    "targetFloor": "중",
+    "totalFloor": "25",
+    "supplySpace": 112.31,
+    "exclusiveSpace": 84.81,
+    "typeName": "E",
+    "direction": "WS",
+    "dealPrice": 1800000000,
+    "buildYear": "2013",
+    "elapsedYear": 13,
+    "broker": "센트럴뷰 좋은집 공인중개사사무소",
+    "realtorCount": 2,
+    "brokerList": [
+      "센트럴뷰 좋은집",
+      "센트럴뷰행운"
+    ],
+    "feature": "강추,인테리어,컨디션 최고,직접 보시면 더 좋아요",
+    "confirmDate": "2026-07-16"
+  },
+  {
+    "articleNumber": "2635086345",
+    "complexName": "광교센트럴뷰",
+    "dong": "6012",
+    "floorInfo": "고/10",
+    "targetFloor": "고",
+    "totalFloor": "10",
+    "supplySpace": 112.25,
+    "exclusiveSpace": 84.76,
+    "typeName": "F",
+    "direction": "ES",
+    "dealPrice": 1800000000,
+    "buildYear": "2013",
+    "elapsedYear": 13,
+    "broker": "광교 센트럴뷰 단지내공인중개사사무소",
+    "realtorCount": 1,
+    "brokerList": [
+      "광교 센트럴뷰 단지내"
+    ],
+    "feature": "사생활 침해없는 뻥뚫린뷰, 산의초, 중앙역, 편의시설, 부분수리",
+    "confirmDate": "2026-06-30"
+  }
+]

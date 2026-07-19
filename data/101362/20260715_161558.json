@@ -1,0 +1,38 @@
+[
+  {
+    "articleNumber": "2637967603",
+    "complexName": "자연앤자이1단지",
+    "dong": "5103",
+    "floorInfo": "11/34",
+    "targetFloor": "11",
+    "totalFloor": "34",
+    "supplySpace": 144.42,
+    "exclusiveSpace": 116.35,
+    "typeName": "A",
+    "direction": "ES",
+    "dealPrice": 1980000000,
+    "buildYear": "2012",
+    "elapsedYear": 14,
+    "broker": "광교입장힐스공인중개사사무소",
+    "feature": "급매,가장좋은동,전망너무좋아요,초,중,학원초인접",
+    "confirmDate": "2026-07-14"
+  },
+  {
+    "articleNumber": "2638104435",
+    "complexName": "자연앤자이1단지",
+    "dong": "5103",
+    "floorInfo": "고/34",
+    "targetFloor": "고",
+    "totalFloor": "34",
+    "supplySpace": 145.74,
+    "exclusiveSpace": 116.43,
+    "typeName": "B",
+    "direction": "ES",
+    "dealPrice": 2350000000,
+    "buildYear": "2012",
+    "elapsedYear": 14,
+    "broker": "광교더힐스(단지내)공인중개사사무소",
+    "feature": "The. 추천 풀인테리어 시에 단독세대 환상의뷰",
+    "confirmDate": "2026-07-15"
+  }
+]

@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>매물 현황판</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --border:         rgba(11,11,11,0.10);
+    --badge-new:      #008300;
+    --badge-up:       #e34948;
+    --badge-down:     #2a78d6;
+    --badge-removed:  #898781;
+    --row-hover:      #f2f1ee;
+    --brand-green:    #03c75a;
+    --on-brand:       #05170d;
+    --area-tier-1:    #86b6ef;
+    --area-tier-2:    #5598e7;
+    --area-tier-3:    #2a78d6;
+    --area-tier-4:    #1c5cab;
+    --area-tier-5:    #104281;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --area-tier-1:    #b7d3f6;
+      --area-tier-2:    #86b6ef;
+      --area-tier-3:    #5598e7;
+      --area-tier-4:    #2a78d6;
+      --area-tier-5:    #1c5cab;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --border:         rgba(255,255,255,0.10);
+      --badge-new:      #008300;
+      --badge-up:       #e66767;
+      --badge-down:     #3987e5;
+      --badge-removed:  #898781;
+      --row-hover:      #232322;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page-plane:     #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --border:         rgba(255,255,255,0.10);
+    --badge-new:      #008300;
+    --badge-up:       #e66767;
+    --badge-down:     #3987e5;
+    --badge-removed:  #898781;
+    --row-hover:      #232322;
+    --area-tier-1:    #b7d3f6;
+    --area-tier-2:    #86b6ef;
+    --area-tier-3:    #5598e7;
+    --area-tier-4:    #2a78d6;
+    --area-tier-5:    #1c5cab;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page-plane);
+    color: var(--text-primary);
+  }
+  .brand-bar { height: 4px; background: var(--brand-green); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  header.board-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px 16px;
+    margin-bottom: 20px;
+  }
+  header.board-header h1 {
+    font-size: 22px; margin: 0; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  header.board-header h1::before {
+    content: ""; display: inline-block; width: 10px; height: 10px;
+    border-radius: 3px; background: var(--brand-green);
+  }
+  header.board-header .meta { color: var(--text-secondary); font-size: 13px; }
+  header.board-header .generated { color: var(--text-muted); font-size: 12px; }
+  .complex-select {
+    display: block;
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary);
+    border-radius: 8px; padding: 4px 10px; font-size: 12px; margin-bottom: 8px; cursor: pointer;
+  }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-tile {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat-tile .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+  .stat-tile .value { font-size: 26px; font-weight: 700; font-variant-numeric: proportional-nums; }
+  .stat-tile .value.up { color: var(--badge-up); }
+  .stat-tile .value.down { color: var(--badge-down); }
+  .stat-tile .value.new { color: var(--badge-new); }
+  .stat-tile .sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .filter-row {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .chip {
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-secondary);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .chip[aria-pressed="true"] {
+    background: var(--brand-green);
+    color: var(--on-brand);
+    border-color: var(--brand-green);
+    font-weight: 600;
+  }
+  .search-input {
+    margin-left: auto;
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-primary);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 13px;
+    min-width: 160px;
+  }
+  .search-input:focus {
+    outline: none;
+    border-color: var(--brand-green);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-green) 25%, transparent);
+  }
+
+  .table-card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow-x: auto;
+  }
+  table.listing-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 920px; }
+  .listing-table thead th {
+    position: sticky; top: 0;
+    background: var(--surface-1);
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 10px 10px;
+    border-bottom: 1px solid var(--gridline);
+    white-space: nowrap;
+  }
+  .listing-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--gridline);
+    color: var(--text-primary);
+    vertical-align: middle;
+    font-variant-numeric: tabular-nums;
+  }
+  .listing-table tbody tr.main-row { cursor: pointer; }
+  .listing-table tbody tr.main-row:hover { background: var(--row-hover); }
+  .listing-table tbody tr.removed td { color: var(--text-muted); text-decoration: line-through; }
+
+  .area-bar { width: 6px; padding: 0 !important; background: var(--border); }
+  .area-bar.area-tier-1 { background: var(--area-tier-1); }
+  .area-bar.area-tier-2 { background: var(--area-tier-2); }
+  .area-bar.area-tier-3 { background: var(--area-tier-3); }
+  .area-bar.area-tier-4 { background: var(--area-tier-4); }
+  .area-bar.area-tier-5 { background: var(--area-tier-5); }
+  .listing-table tbody tr.detail-row { display: none; }
+  .listing-table tbody tr.detail-row.open { display: table-row; }
+  .listing-table tbody tr.detail-row td {
+    background: var(--page-plane);
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    line-height: 1.6;
+    cursor: default;
+  }
+  .detail-row .feature { color: var(--text-primary); margin-bottom: 4px; }
+  .detail-row .brokers { color: var(--text-muted); font-style: italic; }
+
+  .article-link {
+    color: var(--area-tier-4);
+    text-decoration: none;
+    font-size: 12px;
+  }
+  .article-link:hover { text-decoration: underline; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 12px; font-weight: 600;
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .badge.new { color: var(--badge-new); background: color-mix(in srgb, var(--badge-new) 14%, transparent); }
+  .badge.up { color: var(--badge-up); background: color-mix(in srgb, var(--badge-up) 14%, transparent); }
+  .badge.down { color: var(--badge-down); background: color-mix(in srgb, var(--badge-down) 14%, transparent); }
+  .badge.removed { color: var(--badge-removed); background: color-mix(in srgb, var(--badge-removed) 14%, transparent); }
+  .badge.plain { color: var(--text-muted); background: transparent; }
+
+  .price { font-weight: 700; color: var(--text-primary); }
+  .floor.low { color: var(--badge-up); font-weight: 700; }
+  .realtor-count {
+    display: inline-block; margin-left: 6px;
+    font-size: 11px; color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px;
+  }
+  .chevron { color: var(--text-muted); font-size: 11px; margin-left: 4px; }
+
+  .theme-toggle {
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary);
+    border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  .theme-toggle:hover { border-color: var(--brand-green); color: var(--text-primary); }
+
+  .view-toggle { display: flex; gap: 4px; }
+  .view-toggle .chip { padding: 6px 12px; }
+
+  .fav-star {
+    cursor: pointer; font-size: 16px; color: var(--text-muted);
+    user-select: none; line-height: 1; display: inline-block;
+  }
+  .fav-star.active { color: #c98500; }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+  }
+  .listing-card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-left: 7px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    cursor: pointer;
+  }
+  .listing-card.area-tier-1 { border-left-color: var(--area-tier-1); }
+  .listing-card.area-tier-2 { border-left-color: var(--area-tier-2); }
+  .listing-card.area-tier-3 { border-left-color: var(--area-tier-3); }
+  .listing-card.area-tier-4 { border-left-color: var(--area-tier-4); }
+  .listing-card.area-tier-5 { border-left-color: var(--area-tier-5); }
+
+  .area-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 999px;
+    color: var(--text-secondary);
+    background: var(--page-plane);
+    border: 1px solid var(--border);
+  }
+  .area-tag .dot { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+  .area-tag.area-tier-1 .dot { background: var(--area-tier-1); }
+  .area-tag.area-tier-2 .dot { background: var(--area-tier-2); }
+  .area-tag.area-tier-3 .dot { background: var(--area-tier-3); }
+  .area-tag.area-tier-4 .dot { background: var(--area-tier-4); }
+  .area-tag.area-tier-5 .dot { background: var(--area-tier-5); }
+
+  .area-legend {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    font-size: 12px; color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+  .area-legend .swatch {
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .area-legend .dot {
+    width: 10px; height: 10px; border-radius: 3px; display: inline-block;
+  }
+  .listing-card:hover { background: var(--row-hover); }
+  .listing-card.removed { opacity: 0.65; }
+  .listing-card.removed .card-price { text-decoration: line-through; }
+  .listing-card .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .listing-card .card-price { font-size: 20px; font-weight: 700; margin: 8px 0 2px; }
+  .listing-card .card-diff { font-size: 12.5px; margin-bottom: 6px; }
+  .listing-card .card-sub { font-size: 16.5px; font-weight: 700; color: var(--text-secondary); line-height: 1.6; }
+  .listing-card .card-sub2 { font-size: 12.5px; font-weight: 400; color: var(--text-secondary); line-height: 1.6; }
+  .listing-card .card-broker { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+  .listing-card .card-detail {
+    display: none; font-size: 12px; color: var(--text-secondary);
+    border-top: 1px solid var(--gridline); margin-top: 10px; padding-top: 8px; line-height: 1.6;
+  }
+  .listing-card .card-detail.open { display: block; }
+  .listing-card .card-detail .feature { color: var(--text-primary); margin-bottom: 4px; }
+  .listing-card .card-detail .brokers { color: var(--text-muted); font-style: italic; }
+</style>
+</head>
+<body>
+<div class="brand-bar"></div>
+<div class="wrap">
+  <header class="board-header">
+    <div>
+      <select id="complexSelect" class="complex-select"></select>
+      <h1><span id="complexTitle">-</span></h1>
+      <div class="meta" id="complexMeta"></div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span class="generated" id="generatedAt"></span>
+      <button class="theme-toggle" id="themeToggle" type="button">다크모드</button>
+    </div>
+  </header>
+
+  <div class="stat-row">
+    <div class="stat-tile">
+      <div class="label">총 매물</div>
+      <div class="value" id="statTotal">0</div>
+    </div>
+    <div class="stat-tile">
+      <div class="label">신규</div>
+      <div class="value new" id="statNew">0</div>
+    </div>
+    <div class="stat-tile">
+      <div class="label">가격변동</div>
+      <div class="value" id="statPriceChange">0</div>
+      <div class="sub" id="statPriceChangeSub"></div>
+    </div>
+    <div class="stat-tile">
+      <div class="label">삭제</div>
+      <div class="value" id="statRemoved">0</div>
+    </div>
+  </div>
+
+  <div class="filter-row">
+    <button class="chip" data-filter="all" aria-pressed="true" type="button">전체</button>
+    <button class="chip" data-filter="신규" aria-pressed="false" type="button">신규</button>
+    <button class="chip" data-filter="가격변동" aria-pressed="false" type="button">가격변동</button>
+    <button class="chip" data-filter="삭제" aria-pressed="false" type="button">삭제</button>
+    <button class="chip" data-filter="관심매물" aria-pressed="false" type="button">★ 관심매물</button>
+    <div class="view-toggle">
+      <button class="chip" data-view="list" aria-pressed="true" type="button">리스트</button>
+      <button class="chip" data-view="card" aria-pressed="false" type="button">카드</button>
+    </div>
+    <input class="search-input" id="searchInput" type="text" placeholder="동 검색 (예: 105)">
+  </div>
+
+  <div class="table-card" id="tableView">
+    <table class="listing-table">
+      <thead>
+        <tr>
+          <th></th><th></th><th>번호</th><th>상태</th><th>매물번호</th><th>동</th><th>층</th>
+          <th>공급/전용(㎡)</th><th>타입</th><th>방향</th><th>매매가</th><th>가격변동</th>
+          <th>중개사무소</th><th>매물확인일</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <div class="area-legend" id="areaLegend" style="display:none;">
+    <span>전용면적</span>
+    <span class="swatch"><span class="dot" style="background:var(--area-tier-1)"></span>~80㎡</span>
+    <span class="swatch"><span class="dot" style="background:var(--area-tier-2)"></span>80~85㎡</span>
+    <span class="swatch"><span class="dot" style="background:var(--area-tier-3)"></span>85~100㎡</span>
+    <span class="swatch"><span class="dot" style="background:var(--area-tier-4)"></span>100~120㎡</span>
+    <span class="swatch"><span class="dot" style="background:var(--area-tier-5)"></span>120㎡~</span>
+  </div>
+  <div class="card-grid" id="cardView" style="display:none;"></div>
+</div>
+
+<script id="dashboard-data" type="application/json">__DATA_JSON__</script>
+<script>
+const ALL_DATA = JSON.parse(document.getElementById('dashboard-data').textContent);
+let currentComplexNumber = Object.keys(ALL_DATA)[0];
+function currentData() { return ALL_DATA[currentComplexNumber]; }
+
+function statusBadge(status) {
+  const map = {
+    '신규': ['new', '신규'],
+    '가격올림': ['up', '▲ 가격올림'],
+    '가격내림': ['down', '▼ 가격내림'],
+    '삭제': ['removed', '삭제'],
+    '변경없음': ['plain', ''],
+    '최초수집': ['plain', '최초수집'],
+  };
+  const [cls, label] = map[status] || ['plain', status];
+  if (!label) return '';
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function isLowFloor(targetFloor) {
+  if (targetFloor === '저') return true;
+  if (/^\d+$/.test(targetFloor)) return parseInt(targetFloor, 10) <= 5;
+  return false;
+}
+
+function areaTier(exclusiveSpace) {
+  if (exclusiveSpace < 80) return 1;
+  if (exclusiveSpace < 85) return 2;
+  if (exclusiveSpace < 100) return 3;
+  if (exclusiveSpace < 120) return 4;
+  return 5;
+}
+
+const AREA_TIER_LABELS = { 1: '~80㎡', 2: '80~85㎡', 3: '85~100㎡', 4: '100~120㎡', 5: '120㎡~' };
+function areaTag(exclusiveSpace) {
+  const tier = areaTier(exclusiveSpace);
+  return `<span class="area-tag area-tier-${tier}"><span class="dot"></span>${AREA_TIER_LABELS[tier]}</span>`;
+}
+
+function naverArticleUrl(articleNumber) {
+  return `https://fin.land.naver.com/articles/${articleNumber}`;
+}
+function naverLink(articleNumber, label) {
+  return `<a class="article-link" href="${naverArticleUrl(articleNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${label}</a>`;
+}
+
+function populateComplexSelect() {
+  const select = document.getElementById('complexSelect');
+  select.innerHTML = Object.keys(ALL_DATA).map(num => {
+    const d = ALL_DATA[num];
+    return `<option value="${num}">${d.region} · ${d.complexName}</option>`;
+  }).join('');
+  select.value = currentComplexNumber;
+  select.addEventListener('change', () => {
+    currentComplexNumber = select.value;
+    currentFilter = 'all';
+    currentSearch = '';
+    document.getElementById('searchInput').value = '';
+    document.querySelectorAll('.filter-row > .chip[data-filter]').forEach(c =>
+      c.setAttribute('aria-pressed', c.dataset.filter === 'all' ? 'true' : 'false'));
+    renderMeta();
+    renderStats();
+    render();
+  });
+}
+
+function renderMeta() {
+  const d = currentData();
+  document.getElementById('complexTitle').textContent = d.complexName;
+  document.getElementById('complexMeta').textContent =
+    `${d.region} · 준공년도 ${d.buildYear}년 · 경과 ${d.elapsedYear}년 · 총 ${d.rows.length}건`;
+  document.getElementById('generatedAt').textContent = `생성: ${d.generatedAt}`;
+}
+
+function renderStats() {
+  const rows = currentData().rows;
+  const total = rows.length;
+  const newCount = rows.filter(r => r.status === '신규').length;
+  const upCount = rows.filter(r => r.status === '가격올림').length;
+  const downCount = rows.filter(r => r.status === '가격내림').length;
+  const removedCount = rows.filter(r => r.status === '삭제').length;
+
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statNew').textContent = newCount;
+  document.getElementById('statRemoved').textContent = removedCount;
+
+  const priceChangeEl = document.getElementById('statPriceChange');
+  priceChangeEl.textContent = upCount + downCount;
+  document.getElementById('statPriceChangeSub').innerHTML =
+    `<span style="color:var(--badge-up)">▲${upCount}</span> · <span style="color:var(--badge-down)">▼${downCount}</span>`;
+}
+
+function formatPriceDiff(diff) {
+  if (!diff) return '';
+  const sign = diff > 0 ? '+' : '-';
+  const abs = Math.abs(diff);
+  const eok = Math.floor(abs / 100000000);
+  const man = Math.floor((abs % 100000000) / 10000);
+  let text = '';
+  if (eok) text += `${eok}억`;
+  if (man) text += (text ? ' ' : '') + `${man.toLocaleString()}만`;
+  return sign + (text || `${abs.toLocaleString()}원`);
+}
+
+// 관심매물은 localStorage에 저장한다. 대시보드 파일이 실행마다 같은 경로에
+// 덮어써진다는 전제 하에(파일명 고정) 재생성 후에도 유지된다.
+const FAV_KEY = 'naverLandFavorites';
+function loadFavorites() {
+  try { return new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+function saveFavorites() {
+  localStorage.setItem(FAV_KEY, JSON.stringify([...favorites]));
+}
+const favorites = loadFavorites();
+
+function toggleFavorite(articleNumber) {
+  if (favorites.has(articleNumber)) favorites.delete(articleNumber);
+  else favorites.add(articleNumber);
+  saveFavorites();
+}
+
+function favStar(articleNumber) {
+  const active = favorites.has(articleNumber);
+  return `<span class="fav-star${active ? ' active' : ''}" data-fav="${articleNumber}">${active ? '★' : '☆'}</span>`;
+}
+
+let currentFilter = 'all';
+let currentSearch = '';
+let currentView = 'list';
+
+function matchesFilter(row) {
+  if (currentFilter === '신규' && row.status !== '신규') return false;
+  if (currentFilter === '가격변동' && row.status !== '가격올림' && row.status !== '가격내림') return false;
+  if (currentFilter === '삭제' && row.status !== '삭제') return false;
+  if (currentFilter === '관심매물' && !favorites.has(row.articleNumber)) return false;
+  if (currentSearch && !String(row.dong).includes(currentSearch) && !String(row.articleNumber).includes(currentSearch)) return false;
+  return true;
+}
+
+function bindFavStars(container) {
+  container.querySelectorAll('.fav-star').forEach(star => {
+    star.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFavorite(star.dataset.fav);
+      star.classList.toggle('active');
+      star.textContent = star.classList.contains('active') ? '★' : '☆';
+      if (currentFilter === '관심매물') render();
+    });
+  });
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+
+  rows.forEach((r) => {
+    const mainRow = document.createElement('tr');
+    mainRow.className = 'main-row' + (r.status === '삭제' ? ' removed' : '');
+    const floorClass = isLowFloor(r.targetFloor) ? 'floor low' : 'floor';
+    const brokerCount = r.realtorCount || 1;
+    mainRow.innerHTML = `
+      <td class="area-bar area-tier-${areaTier(r.exclusiveSpace)}"></td>
+      <td>${favStar(r.articleNumber)}</td>
+      <td>${r.no}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td>${naverLink(r.articleNumber, r.articleNumber + ' ↗')}</td>
+      <td>${r.dong}</td>
+      <td class="${floorClass}">${r.floorInfo}</td>
+      <td style="white-space:nowrap;">${r.supplySpace} / ${r.exclusiveSpace} ${areaTag(r.exclusiveSpace)}</td>
+      <td>${r.typeName || ''}</td>
+      <td>${r.direction}</td>
+      <td class="price">${formatPrice(r.dealPrice)}</td>
+      <td>${formatPriceDiff(r.priceDiff)}</td>
+      <td>${r.broker}${brokerCount > 1 ? `<span class="realtor-count">외 ${brokerCount - 1}곳</span>` : ''}</td>
+      <td>${r.confirmDate}<span class="chevron">▾</span></td>
+    `;
+
+    const detailRow = document.createElement('tr');
+    detailRow.className = 'detail-row';
+    const brokerList = (r.brokerList || [r.broker]).join(', ');
+    detailRow.innerHTML = `
+      <td colspan="14">
+        ${r.feature ? `<div class="feature">${r.feature}</div>` : ''}
+        <div class="brokers">중개: ${brokerList}</div>
+      </td>
+    `;
+
+    mainRow.addEventListener('click', () => {
+      detailRow.classList.toggle('open');
+    });
+
+    tbody.appendChild(mainRow);
+    tbody.appendChild(detailRow);
+  });
+
+  bindFavStars(tbody);
+}
+
+function renderCards(rows) {
+  const grid = document.getElementById('cardView');
+  grid.innerHTML = '';
+
+  rows.forEach((r) => {
+    const card = document.createElement('div');
+    card.className = `listing-card area-tier-${areaTier(r.exclusiveSpace)}` + (r.status === '삭제' ? ' removed' : '');
+    const floorClass = isLowFloor(r.targetFloor) ? 'floor low' : 'floor';
+    const brokerCount = r.realtorCount || 1;
+    const brokerList = (r.brokerList || [r.broker]).join(', ');
+    card.innerHTML = `
+      <div class="card-top">
+        <div>${statusBadge(r.status)} ${areaTag(r.exclusiveSpace)}</div>
+        ${favStar(r.articleNumber)}
+      </div>
+      <div class="card-price">${formatPrice(r.dealPrice)}</div>
+      <div class="card-diff">${formatPriceDiff(r.priceDiff)}</div>
+      <div class="card-sub">
+        ${r.dong}동 · <span class="${floorClass}">${r.floorInfo}</span> · ${r.exclusiveSpace}㎡(전용)
+      </div>
+      <div class="card-sub2">${r.typeName || ''} · ${r.direction}</div>
+      <div class="card-broker">${r.broker}${brokerCount > 1 ? `<span class="realtor-count">외 ${brokerCount - 1}곳</span>` : ''} · ${r.confirmDate} · ${naverLink(r.articleNumber, '네이버에서 보기 ↗')}</div>
+      <div class="card-detail">
+        ${r.feature ? `<div class="feature">${r.feature}</div>` : ''}
+        <div class="brokers">중개: ${brokerList}</div>
+      </div>
+    `;
+    const detail = card.querySelector('.card-detail');
+    card.addEventListener('click', () => detail.classList.toggle('open'));
+    grid.appendChild(card);
+  });
+
+  bindFavStars(grid);
+}
+
+function render() {
+  const rows = currentData().rows.filter(matchesFilter);
+  document.getElementById('areaLegend').style.display = 'flex';
+  if (currentView === 'card') {
+    document.getElementById('tableView').style.display = 'none';
+    document.getElementById('cardView').style.display = 'grid';
+    renderCards(rows);
+  } else {
+    document.getElementById('cardView').style.display = 'none';
+    document.getElementById('tableView').style.display = 'block';
+    renderTable(rows);
+  }
+}
+
+function formatPrice(won) {
+  const eok = Math.floor(won / 100000000);
+  const man = Math.floor((won % 100000000) / 10000);
+  return man ? `${eok}억 ${man.toLocaleString()}만` : `${eok}억`;
+}
+
+document.querySelectorAll('.filter-row > .chip[data-filter]').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.filter-row > .chip[data-filter]').forEach(c => c.setAttribute('aria-pressed', 'false'));
+    chip.setAttribute('aria-pressed', 'true');
+    currentFilter = chip.dataset.filter;
+    render();
+  });
+});
+
+document.querySelectorAll('.view-toggle .chip[data-view]').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.view-toggle .chip[data-view]').forEach(c => c.setAttribute('aria-pressed', 'false'));
+    chip.setAttribute('aria-pressed', 'true');
+    currentView = chip.dataset.view;
+    render();
+  });
+});
+
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  currentSearch = e.target.value.trim();
+  render();
+});
+
+const themeToggleBtn = document.getElementById('themeToggle');
+function syncThemeLabel() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  themeToggleBtn.textContent = isDark ? '라이트모드' : '다크모드';
+}
+themeToggleBtn.addEventListener('click', () => {
+  const root = document.documentElement;
+  const current = root.getAttribute('data-theme');
+  root.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+  syncThemeLabel();
+});
+syncThemeLabel();
+
+populateComplexSelect();
+renderMeta();
+renderStats();
+render();
+</script>
+</body>
+</html>

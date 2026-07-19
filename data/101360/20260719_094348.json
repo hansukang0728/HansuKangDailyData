@@ -1,0 +1,156 @@
+[
+  {
+    "articleNumber": "2638452919",
+    "complexName": "자연앤자이3단지",
+    "dong": "5302",
+    "floorInfo": "중/33",
+    "targetFloor": "중",
+    "totalFloor": "33",
+    "supplySpace": 160.13,
+    "exclusiveSpace": 125.6,
+    "typeName": "A",
+    "direction": "ES",
+    "dealPrice": 2200000000,
+    "buildYear": "2012",
+    "elapsedYear": 14,
+    "broker": "광교자이공인중개사사무소",
+    "realtorCount": 1,
+    "brokerList": [
+      "광교자이"
+    ],
+    "feature": "인프라최고단지.탁트인도시뷰.역세권",
+    "confirmDate": "2026-07-16"
+  },
+  {
+    "articleNumber": "2638291436",
+    "complexName": "자연앤자이3단지",
+    "dong": "5303",
+    "floorInfo": "저/33",
+    "targetFloor": "저",
+    "totalFloor": "33",
+    "supplySpace": 160.13,
+    "exclusiveSpace": 125.6,
+    "typeName": "A",
+    "direction": "ES",
+    "dealPrice": 2100000000,
+    "buildYear": "2012",
+    "elapsedYear": 14,
+    "broker": "광교자이공인중개사사무소",
+    "realtorCount": 1,
+    "brokerList": [
+      "광교자이"
+    ],
+    "feature": "화이트 인테리어 최고급.아늑한집",
+    "confirmDate": "2026-07-16"
+  },
+  {
+    "articleNumber": "2637900022",
+    "complexName": "자연앤자이3단지",
+    "dong": "5301",
+    "floorInfo": "저/34",
+    "targetFloor": "저",
+    "totalFloor": "34",
+    "supplySpace": 129.68,
+    "exclusiveSpace": 101.67,
+    "typeName": "A",
+    "direction": "WS",
+    "dealPrice": 2000000000,
+    "buildYear": "2012",
+    "elapsedYear": 14,
+    "broker": "광교자이공인중개사사무소",
+    "realtorCount": 1,
+    "brokerList": [
+      "광교자이"
+    ],
+    "feature": "판상형.인프라최고단지.탁트인뷰",
+    "confirmDate": "2026-07-14"
+  },
+  {
+    "articleNumber": "2637382245",
+    "complexName": "자연앤자이3단지",
+    "dong": "5302",
+    "floorInfo": "저/33",
+    "targetFloor": "저",
+    "totalFloor": "33",
+    "supplySpace": 129.51,
+    "exclusiveSpace": 101.93,
+    "typeName": "B",
+    "direction": "ES",
+    "dealPrice": 1980000000,
+    "buildYear": "2012",
+    "elapsedYear": 14,
+    "broker": "광교자이공인중개사사무소",
+    "realtorCount": 1,
+    "brokerList": [
+      "광교자이"
+    ],
+    "feature": "안정적인도시.호수뷰. 초.중학교인접.",
+    "confirmDate": "2026-07-11"
+  },
+  {
+    "articleNumber": "2636911475",
+    "complexName": "자연앤자이3단지",
+    "dong": "5302",
+    "floorInfo": "중/33",
+    "targetFloor": "중",
+    "totalFloor": "33",
+    "supplySpace": 160.13,
+    "exclusiveSpace": 125.6,
+    "typeName": "A",
+    "direction": "WS",
+    "dealPrice": 2400000000,
+    "buildYear": "2012",
+    "elapsedYear": 14,
+    "broker": "광교자이공인중개사사무소",
+    "realtorCount": 1,
+    "brokerList": [
+      "광교자이"
+    ],
+    "feature": "단지뷰.역세권.초.중학교인접.갤러리아",
+    "confirmDate": "2026-07-09"
+  },
+  {
+    "articleNumber": "2636906328",
+    "complexName": "자연앤자이3단지",
+    "dong": "5302",
+    "floorInfo": "중/33",
+    "targetFloor": "중",
+    "totalFloor": "33",
+    "supplySpace": 160.13,
+    "exclusiveSpace": 125.6,
+    "typeName": "A",
+    "direction": "WS",
+    "dealPrice": 2400000000,
+    "buildYear": "2012",
+    "elapsedYear": 14,
+    "broker": "광교자이공인중개사사무소",
+    "realtorCount": 1,
+    "brokerList": [
+      "광교자이"
+    ],
+    "feature": "초.중학교인접.갤러리아 역세권",
+    "confirmDate": "2026-07-09"
+  },
+  {
+    "articleNumber": "2635995639",
+    "complexName": "자연앤자이3단지",
+    "dong": "5303",
+    "floorInfo": "고/33",
+    "targetFloor": "고",
+    "totalFloor": "33",
+    "supplySpace": 160.13,
+    "exclusiveSpace": 125.6,
+    "typeName": "A",
+    "direction": "ES",
+    "dealPrice": 2200000000,
+    "buildYear": "2012",
+    "elapsedYear": 14,
+    "broker": "광교자이공인중개사사무소",
+    "realtorCount": 1,
+    "brokerList": [
+      "광교자이"
+    ],
+    "feature": "탁트인뷰.중심생활권.역세권.갤러리아.도청",
+    "confirmDate": "2026-07-04"
+  }
+]

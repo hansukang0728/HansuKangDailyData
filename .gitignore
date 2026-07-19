@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.pyc
+
+# 개발 중 스크래치/POC 파일 (실제 세션 쿠키 등 민감정보 포함될 수 있어 제외)
+poc_*.py
+poc_*.json
+poc_*.png
+poc_*.html
+
+# 혹시 모를 인증정보
+credentials.json
+token.json
+*.token
+
+# 로컬 전용 Claude Code 권한 설정 (환경 종속, 공유 불필요)
+.claude/settings.local.json
+
