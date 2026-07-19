@@ -210,11 +210,11 @@ python3 build_dashboard.py
 트리거)이 **매일 아침 새 세션**을 띄워 아래 순서를 그대로 수행하고, 산출물을
 git에 커밋·푸시한다. Pages가 main 브랜치를 게시하므로 **push 대상은 `main`**.
 
-> **전제조건 — GH_PAT 환경변수**: 클라우드 세션의 기본 git 접근은 **읽기 전용**이라
-> `git push`가 403으로 막힌다(GitHub App 경로도 동일). 그래서 저장소 소유자의
-> **fine-grained PAT**(이 저장소 한정, Contents: Read and write)를 Claude Code
-> **환경 변수 `GH_PAT`**로 저장해두고, push할 때 그 토큰으로 github.com에 직접 붙는다.
-> 이 변수가 없으면 크롤/빌드는 되지만 push 단계에서 실패한다.
+> **전제조건 — git 쓰기 권한**: 환경의 GitHub 연결이 쓰기 가능해야 `git push`가 된다
+> (Contents: Read and write). 읽기 전용이면 push가 403으로 막힌다 — 그 경우 저장소
+> 소유자의 fine-grained PAT를 환경변수 `GH_PAT`로 저장해두고
+> `git push "https://x-access-token:${GH_PAT}@github.com/hansukang0728/HansuKangDailyData.git" HEAD:main`
+> 형태로 우회할 수 있다 (URL에 자격증명을 넣으면 insteadOf 재작성을 우회함).
 
 새 세션은 저장소를 기본 브랜치(main)로 새로 clone한 상태로 시작한다. 실행 순서:
 
@@ -234,10 +234,7 @@ python3 build_dashboard.py
 git config user.email noreply@anthropic.com && git config user.name Claude
 git add data output docs/dashboard.html
 git commit -m "데일리 매물 수집 $(date +%Y-%m-%d)"
-# 세션 기본 git 프록시는 읽기 전용(403)이라, 환경변수 GH_PAT(파인그레인드 PAT,
-# Contents:read&write)로 github.com에 직접 push한다. URL에 자격증명이 들어가면
-# insteadOf 재작성(→읽기전용 프록시)을 자연히 우회한다. 토큰은 로그/커밋에 남기지 말 것.
-git push "https://x-access-token:${GH_PAT}@github.com/hansukang0728/HansuKangDailyData.git" HEAD:main
+git push origin main   # 환경에 git 쓰기 권한이 있어야 함(위 "전제조건" 참고)
 ```
 
 - **차단되면 재시도 금지** ("겪었던 문제" 3번). Routine은 하루 1회만. 크롤이 실패하면
