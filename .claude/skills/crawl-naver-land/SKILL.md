@@ -170,22 +170,26 @@ URL만으로 안 되는 예외 상황이면 F12 Network 탭에서 `front-api`가
 
 ## HTML 매물 현황판 (dataviz 스킬 기반)
 
-```powershell
+```bash
 # crawl_complex.py로 스냅샷을 쌓아둔 뒤 (크롤링 없이, data/ 폴더만 읽음)
-.\.venv\Scripts\python.exe build_dashboard.py
+python3 build_dashboard.py
 ```
 
-- 결과: `G:\내 드라이브\AI\부동산\dashboard.html` **고정 경로** (타임스탬프 없음).
-  구글 드라이브 데스크톱 앱(스트리밍 모드, G: 드라이브로 마운트됨)의 동기화 폴더에
-  바로 저장해서, 저장하는 즉시 클라우드에 올라가고 태블릿 등 다른 기기에서
-  볼 수 있게 했음 (`build_dashboard.py`의 `DRIVE_OUTPUT_DIR`). OAuth/API 방식은
-  설정이 복잡해서 안 씀 — 사용자가 이미 구글 드라이브 데스크톱 앱을 설치해뒀길래
-  그냥 그 동기화 폴더에 직접 쓰는 걸로 단순화함. 이 드라이브 문자는 사용자
-  PC 한정이라 다른 PC에서 돌리면 경로가 다를 수 있음. 관심단지 전체를
-  한 파일에 담고 상단 드롭다운으로 단지를 전환한다.
+- 결과: 저장소 안의 `docs/dashboard.html` **고정 경로** (타임스탬프 없음).
+  `docs/` 폴더를 GitHub Pages 소스(main 브랜치 `/docs`)로 지정해두면, 이 파일을
+  커밋/푸시하는 즉시 Pages URL로 게시된다
+  (예: `https://hansukang0728.github.io/HansuKangDailyData/dashboard.html`).
+  태블릿 등 다른 기기에서는 이 URL을 즐겨찾기해서 본다. 관심단지 전체를 한 파일에
+  담고 상단 드롭다운으로 단지를 전환한다.
+  - **예전 방식(참고)**: 로컬 실행 시절엔 구글 드라이브 데스크톱 앱의 동기화
+    폴더(`G:\내 드라이브\AI\부동산`)에 직접 써서 클라우드 업로드를 맡겼다.
+    클라우드 자동화(아래 "데일리 자동화")로 옮기면서 그 드라이브 경로가 없어져
+    git 저장소 + GitHub Pages 방식으로 바꿨다. (그래서 `requirements.txt`의
+    `google-auth-oauthlib`/`google-api-python-client`도 더는 필요 없어 제거함.)
 - **왜 고정 경로인가**: ★ 관심매물은 브라우저 localStorage에 저장되는데, 이건
-  파일 경로(origin)에 묶인다. 매번 새 타임스탬프 파일을 만들면 관심매물이 안
-  이어지므로, 이 파일만은 실행할 때마다 덮어쓴다 (엑셀과 다른 정책).
+  origin(도메인/경로)에 묶인다. Pages URL은 고정 origin이라 매일 재생성해 덮어써도
+  관심매물이 이어진다. 매번 새 타임스탬프 파일을 만들면 origin이 달라져 안 이어지므로,
+  이 파일만은 실행할 때마다 덮어쓴다 (엑셀과 다른 정책).
 - `dashboard_template.html`이 템플릿, `build_dashboard.py`가 `data/{complexNumber}/`의
   최신 스냅샷 2개(현재/직전)를 읽어 `assemble_rows()`로 상태를 매기고, 템플릿의
   `__DATA_JSON__` 자리에 `{complexNumber: {...}, ...}` 형태로 JSON을 주입한다.
@@ -199,6 +203,53 @@ URL만으로 안 되는 예외 상황이면 F12 Network 탭에서 `front-api`가
   분리 — 상태 배지 색은 안 건드림).
 - 관심매물(★)은 `localStorage` 키 `naverLandFavorites`에 매물번호 배열로 저장.
   단지 간에도 공유되는 단일 집합(매물번호가 전역적으로 고유하므로 문제없음).
+
+## 데일리 자동화 (클라우드 / Claude Routine)
+
+로컬 PC를 떠나 Claude Code 클라우드에서 매일 자동 실행한다. Claude Routine(스케줄
+트리거)이 **매일 아침 새 세션**을 띄워 아래 순서를 그대로 수행하고, 산출물을
+git에 커밋·푸시한다. Pages가 main 브랜치를 게시하므로 **push 대상은 `main`**.
+
+> **전제조건 — GH_PAT 환경변수**: 클라우드 세션의 기본 git 접근은 **읽기 전용**이라
+> `git push`가 403으로 막힌다(GitHub App 경로도 동일). 그래서 저장소 소유자의
+> **fine-grained PAT**(이 저장소 한정, Contents: Read and write)를 Claude Code
+> **환경 변수 `GH_PAT`**로 저장해두고, push할 때 그 토큰으로 github.com에 직접 붙는다.
+> 이 변수가 없으면 크롤/빌드는 되지만 push 단계에서 실패한다.
+
+새 세션은 저장소를 기본 브랜치(main)로 새로 clone한 상태로 시작한다. 실행 순서:
+
+```bash
+# 1) 의존성 설치 (Chromium은 환경에 이미 있음 — playwright install 하지 말 것)
+pip install -q -r requirements.txt
+
+# 2) 크롤링: 화면 없는 서버라 xvfb로 감싼다.
+#    crawl_complex.py는 headless=False + 스텔스 설정이라야 네이버를 통과하므로
+#    headless로 바꾸지 말고 xvfb-run으로 가상 디스플레이만 제공한다.
+xvfb-run -a python3 crawl_complex.py --all
+
+# 3) 현황판 생성 (docs/dashboard.html 덮어씀)
+python3 build_dashboard.py
+
+# 4) 산출물 커밋 & 푸시 (data/ 스냅샷, output/ 엑셀, docs/dashboard.html)
+git config user.email noreply@anthropic.com && git config user.name Claude
+git add data output docs/dashboard.html
+git commit -m "데일리 매물 수집 $(date +%Y-%m-%d)"
+# 세션 기본 git 프록시는 읽기 전용(403)이라, 환경변수 GH_PAT(파인그레인드 PAT,
+# Contents:read&write)로 github.com에 직접 push한다. URL에 자격증명이 들어가면
+# insteadOf 재작성(→읽기전용 프록시)을 자연히 우회한다. 토큰은 로그/커밋에 남기지 말 것.
+git push "https://x-access-token:${GH_PAT}@github.com/hansukang0728/HansuKangDailyData.git" HEAD:main
+```
+
+- **차단되면 재시도 금지** ("겪었던 문제" 3번). Routine은 하루 1회만. 크롤이 실패하면
+  그날 run은 실패로 두고 다음 날을 기다린다. 재시도 루프를 넣지 말 것.
+- **일부만 수집돼도** build_dashboard.py는 있는 스냅샷만으로 현황판을 만든다(스킵 로그).
+  크롤이 완전히 실패해 새 스냅샷이 하나도 없으면 커밋할 변동이 없을 수 있음 —
+  `git commit`이 "nothing to commit"으로 실패해도 워크플로우 전체를 실패로 보지 말 것.
+- **최초 1회 설정(웹에서 수동)**: 저장소 Settings → Pages → Source를 `main` /`docs`로
+  지정해야 URL이 뜬다. 코드 변경(경로/requirements)은 main에 병합돼 있어야 Routine이
+  올바른 build_dashboard.py를 쓴다.
+- Routine 자체(트리거)는 `create_trigger`(create_new_session_on_fire=true, 매일 cron)로
+  만든다. cron은 UTC 기준 — 아침 8시 KST = `0 23 * * *`.
 
 ## 미해결 — 사용자가 추가 요청한 것
 

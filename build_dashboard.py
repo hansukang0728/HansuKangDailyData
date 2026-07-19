@@ -4,10 +4,13 @@
 먼저 돌려서 스냅샷을 쌓아둔 상태여야 함). 관심매물(★, localStorage)이 재생성
 후에도 유지되도록 고정 경로에 매번 덮어쓴다.
 
-저장 위치는 구글 드라이브 동기화 폴더(G:\\내 드라이브\\AI\\부동산)로 지정해서,
-파일이 저장되는 즉시 구글 드라이브가 자동으로 클라우드에 업로드하게 한다
-(태블릿 등 다른 기기에서 보기 위함). 이 드라이브 문자(G:)는 사용자 PC의
-구글 드라이브 데스크톱 앱 마운트 경로라 다른 PC에서는 다를 수 있다.
+저장 위치는 저장소 안의 docs/ 폴더(docs/dashboard.html)다. 이 폴더를 GitHub
+Pages 소스(main 브랜치 /docs)로 지정하면, 커밋/푸시하는 즉시 Pages URL로
+게시되어 태블릿 등 다른 기기에서 볼 수 있다 (예:
+https://hansukang0728.github.io/HansuKangDailyData/dashboard.html).
+Pages 도메인은 고정 origin이라 매일 재생성해도 localStorage 관심매물(★)이 유지된다.
+(예전에는 구글 드라이브 데스크톱 앱의 로컬 동기화 폴더에 직접 썼으나,
+클라우드 자동화로 옮기면서 git + Pages 방식으로 바꿨다.)
 """
 import json
 from datetime import datetime
@@ -16,8 +19,8 @@ from pathlib import Path
 from crawl_complex import BASE_DIR, DATA_DIR, assemble_rows
 from watchlist import load_watchlist
 
-DRIVE_OUTPUT_DIR = Path(r"G:\내 드라이브\AI\부동산")
-OUTPUT_PATH = DRIVE_OUTPUT_DIR / "dashboard.html"
+DOCS_DIR = BASE_DIR / "docs"
+OUTPUT_PATH = DOCS_DIR / "dashboard.html"
 TEMPLATE_PATH = BASE_DIR / "dashboard_template.html"
 
 
