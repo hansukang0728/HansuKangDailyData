@@ -15,6 +15,7 @@ interface Props {
   onToggleFav: () => void;
   onHide: () => void;
   onOpenPage: (url: string, title: string) => void;
+  onOpenFloorPlan: () => void;
   ownerOnly?: boolean; // "집주인만" 필터가 켜져 있으면 집주인 확인 중개사 설명만 보여준다
 }
 
@@ -30,7 +31,7 @@ function historyText(e: HistoryEvent): string {
   return e.type === 'ended' ? label : `${label} · ${e.kind} ${price}`;
 }
 
-export function ListingCard({ house, status, fav, open, selected, onToggle, onToggleFav, onHide, onOpenPage, ownerOnly }: Props) {
+export function ListingCard({ house, status, fav, open, selected, onToggle, onToggleFav, onHide, onOpenPage, onOpenFloorPlan, ownerOnly }: Props) {
   const l = house.listing;
   const [showAllBrokers, setShowAllBrokers] = useState(false);
   const ownerArticles = l.brokerArticles.filter((b) => b.owner);
@@ -71,14 +72,17 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
         </Pressable>
       </View>
       <View style={styles.areaRow}>
-        <View style={styles.areaBadge}>
-          <Text style={styles.areaText}>전용 {areaLabel(l)}㎡</Text>
-        </View>
-        {l.typeName ? (
-          <View style={styles.typeBadge}>
-            <Text style={styles.typeText}>{l.typeName}타입</Text>
+        <Pressable style={styles.areaRow} onPress={onOpenFloorPlan} accessibilityLabel="이 타입 평면도 보기">
+          <View style={styles.areaBadge}>
+            <Text style={styles.areaText}>전용 {areaLabel(l)}㎡</Text>
           </View>
-        ) : null}
+          {l.typeName ? (
+            <View style={styles.typeBadge}>
+              <Text style={styles.typeText}>{l.typeName}타입</Text>
+            </View>
+          ) : null}
+          <Text style={styles.planLink}>평면도 ›</Text>
+        </Pressable>
         {l.owner ? <OwnerBadge /> : null}
         <View style={styles.flex} />
         <Text style={[styles.kind, { color: l.kind === '월세' ? C.rent : C.accent }]}>{l.kind}</Text>
@@ -206,6 +210,7 @@ const styles = StyleSheet.create({
   historyWhen: { fontSize: 12, color: C.muted, width: 92 },
   historyWhat: { flex: 1, fontSize: 12, color: C.body },
   areaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  planLink: { fontSize: 13, fontWeight: '700', color: C.accent, paddingVertical: 8 },
   areaBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: C.accentSoft },
   areaText: { fontSize: 17, fontWeight: '800', color: C.accentDark },
   typeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: C.ink },

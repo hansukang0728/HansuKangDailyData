@@ -49,6 +49,8 @@ WebView가 네이버 지도 페이지를 열고, 그 페이지 안에서 매물 
 - 기준가: 집주인 확인 중개사 가격 중 최저가(없으면 전체 최저가). 정렬·필터·가격변동 비교에 사용
 - 종료 매물은 "지우기"로 목록에서 숨기되 기록은 남겨 재등록 시 알아봄
 - 화면 너비 900 이상(태블릿)이면 왼쪽 목록 + 오른쪽 상세
+- 평면도: 카드의 면적·타입 배지를 누르면 `complex/pyeongGroups`·`complex/pyeong`·`complex/maintenanceFee`
+  (front-api)로 타입 목록·평면도·관리비를 받아 앱 화면에 표시 (`app/src/complexInfo.ts`, 30일 캐시)
 - 필터: 단지, 전용 59–84㎡, 타입, 보증금(3~12억)·월세 상한, 집주인만 (`app/src/filters.ts`)
 - `app/src/NaverBridge.tsx`: WebView 수집기, `app/src/listing.ts`: 응답 해석·정렬
 - "원본 데이터" 화면에서 네이버 응답 원본을 보고 공유할 수 있음 (필드 확인용)

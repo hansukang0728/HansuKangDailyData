@@ -1,5 +1,5 @@
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -14,8 +14,10 @@ import {
 
 import { ArticleViewer } from './src/ArticleViewer';
 import { Chip } from './src/Chip';
+import { loadTypes } from './src/complexInfo';
 import { COMPLEXES, DELAY_BETWEEN_COMPLEXES_MS, TRADE_TYPES } from './src/complexes';
 import { FilterPanel } from './src/FilterPanel';
+import { FloorPlanSheet } from './src/FloorPlanSheet';
 import { activeCount, DEFAULT_FILTERS, Filters, matches } from './src/filters';
 import { compareListings, isOwnerArticle, Listing, SortKey, toListing, typeKey, typeLabel } from './src/listing';
 import { ListingCard } from './src/ListingCard';
@@ -75,6 +77,13 @@ export default function App() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selectedId, setSelectedId] = useState<string>();
   const [viewer, setViewer] = useState<{ url: string; title: string }>();
+  const [floorPlanFor, setFloorPlanFor] = useState<Listing>();
+
+  // 네이버 front-api GET (평면도·타입 정보용). 참조가 바뀌지 않게 고정해 둔다
+  const getJson = useCallback(<T,>(path: string) => {
+    if (!bridge.current) return Promise.reject(new Error('네이버 연결 없음'));
+    return bridge.current.getJson<T>(path);
+  }, []);
 
   // 저장해 둔 조회 기록·필터·즐겨찾기를 불러온다
   useEffect(() => {
@@ -162,6 +171,8 @@ export default function App() {
         const result = await bridge.current.collect(cn, TRADE_TYPES, (count) => setProgress({ index: i, count }));
         raw[cn] = result.items;
         fresh[cn] = parseItems(result.items, cn);
+        // 평면도 화면을 빨리 열 수 있게 타입 목록을 미리 받아 둔다 (30일에 한 번)
+        await loadTypes(getJson, cn).catch(() => undefined);
       } catch (e: any) {
         errs.push(`${nameOf(cn)}: ${e?.message ?? String(e)}`);
       }
@@ -230,6 +241,7 @@ export default function App() {
       onToggleFav={() => toggleFav(h.id)}
       onHide={() => hideWhere((x) => x.id === h.id)}
       onOpenPage={(url, title) => setViewer({ url, title })}
+      onOpenFloorPlan={() => setFloorPlanFor(h.listing)}
       ownerOnly={filters.ownerOnly}
     />
   );
@@ -390,6 +402,15 @@ export default function App() {
           )}
         </View>
       )}
+
+      {floorPlanFor ? (
+        <FloorPlanSheet
+          listing={floorPlanFor}
+          getJson={pageStatus === 'ready' ? getJson : undefined}
+          topPad={topPad}
+          onClose={() => setFloorPlanFor(undefined)}
+        />
+      ) : null}
 
       {viewer ? (
         <ArticleViewer

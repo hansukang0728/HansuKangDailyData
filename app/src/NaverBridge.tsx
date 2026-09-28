@@ -22,6 +22,8 @@ export interface CollectResult {
 
 export interface NaverBridgeHandle {
   collect(complexNumber: string, tradeTypes: string[], onProgress?: (count: number) => void): Promise<CollectResult>;
+  // 네이버 front-api GET 요청 하나 (예: '/complex/pyeongGroups?complexNumber=121427'). 응답의 result를 돌려준다
+  getJson<T = any>(path: string): Promise<T>;
   reload(): void;
 }
 
@@ -66,8 +68,29 @@ function buildScript(id: string, complexNumber: string, tradeTypes: string[]): s
 true;`;
 }
 
+function buildGetScript(id: string, path: string): string {
+  return `
+(async function () {
+  var post = function (o) { window.ReactNativeWebView.postMessage(JSON.stringify(o)); };
+  try {
+    var res = await fetch(${JSON.stringify('https://fin.land.naver.com/front-api/v1' + path)}, {
+      headers: { 'accept': 'application/json, text/plain, */*' },
+      credentials: 'include'
+    });
+    var text = await res.text();
+    if (res.status !== 200) { post({ id: ${JSON.stringify(id)}, ok: false, error: 'HTTP ' + res.status + ' ' + text.slice(0, 300) }); return; }
+    var body = JSON.parse(text);
+    if (body.isSuccess === false) { post({ id: ${JSON.stringify(id)}, ok: false, error: text.slice(0, 300) }); return; }
+    post({ id: ${JSON.stringify(id)}, ok: true, data: body.result === undefined ? null : body.result });
+  } catch (e) {
+    post({ id: ${JSON.stringify(id)}, ok: false, error: String(e) });
+  }
+})();
+true;`;
+}
+
 interface Pending {
-  resolve: (r: CollectResult) => void;
+  resolve: (r: any) => void;
   reject: (e: Error) => void;
   onProgress?: (count: number) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -77,17 +100,23 @@ export const NaverBridge = forwardRef<NaverBridgeHandle, Props>(function NaverBr
   const webRef = useRef<WebView>(null);
   const pending = useRef(new Map<string, Pending>());
 
+  const run = <T,>(build: (id: string) => string, timeoutMs: number, onProgress?: (count: number) => void) =>
+    new Promise<T>((resolve, reject) => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const timer = setTimeout(() => {
+        pending.current.delete(id);
+        reject(new Error(`시간 초과 (${timeoutMs / 1000}초). 네이버 페이지가 제대로 열렸는지 확인하세요.`));
+      }, timeoutMs);
+      pending.current.set(id, { resolve, reject, onProgress, timer });
+      webRef.current?.injectJavaScript(build(id));
+    });
+
   useImperativeHandle(ref, () => ({
     collect(complexNumber, tradeTypes, onProgress) {
-      return new Promise<CollectResult>((resolve, reject) => {
-        const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        const timer = setTimeout(() => {
-          pending.current.delete(id);
-          reject(new Error('시간 초과 (90초). 네이버 페이지가 제대로 열렸는지 확인하세요.'));
-        }, 90000);
-        pending.current.set(id, { resolve, reject, onProgress, timer });
-        webRef.current?.injectJavaScript(buildScript(id, complexNumber, tradeTypes));
-      });
+      return run<CollectResult>((id) => buildScript(id, complexNumber, tradeTypes), 90000, onProgress);
+    },
+    getJson(path) {
+      return run((id) => buildGetScript(id, path), 20000);
     },
     reload() {
       onStatus('loading');
@@ -110,7 +139,7 @@ export const NaverBridge = forwardRef<NaverBridgeHandle, Props>(function NaverBr
     }
     clearTimeout(p.timer);
     pending.current.delete(msg.id);
-    if (msg.ok) p.resolve({ items: msg.items, pages: msg.pages });
+    if (msg.ok) p.resolve('data' in msg ? msg.data : { items: msg.items, pages: msg.pages });
     else p.reject(new Error(msg.error));
   };
 

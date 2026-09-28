@@ -44,7 +44,7 @@ export interface Listing {
   priceMax?: { deposit: number; rent: number };
 }
 
-const DIRECTIONS: Record<string, string> = {
+export const DIRECTIONS: Record<string, string> = {
   SS: '남향', ES: '남동향', WS: '남서향', EE: '동향', WW: '서향',
   NN: '북향', EN: '북동향', WN: '북서향',
 };
