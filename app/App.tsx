@@ -15,14 +15,27 @@ import {
 import { ArticleViewer } from './src/ArticleViewer';
 import { Chip } from './src/Chip';
 import { loadTypes } from './src/complexInfo';
-import { COMPLEXES, DELAY_BETWEEN_COMPLEXES_MS, TRADE_TYPES } from './src/complexes';
+import { DEFAULT_PROFILES, DELAY_BETWEEN_COMPLEXES_MS, Profile } from './src/complexes';
 import { FilterPanel } from './src/FilterPanel';
 import { FloorPlanSheet } from './src/FloorPlanSheet';
 import { activeCount, DEFAULT_FILTERS, Filters, matches } from './src/filters';
 import { compareListings, isOwnerArticle, Listing, SortKey, toListing, typeKey, typeLabel } from './src/listing';
 import { ListingCard } from './src/ListingCard';
 import { NaverBridge, NaverBridgeHandle } from './src/NaverBridge';
-import { loadFavorites, loadFilters, loadResult, saveFavorites, saveFilters, saveResult } from './src/storage';
+import { ProfileManager } from './src/ProfileManager';
+import {
+  loadActiveProfile,
+  loadFavorites,
+  loadFilters,
+  loadProfiles,
+  loadResult,
+  removeProfileData,
+  saveActiveProfile,
+  saveFavorites,
+  saveFilters,
+  saveProfiles,
+  saveResult,
+} from './src/storage';
 import { C } from './src/theme';
 import { House, houseStatus, reconcile } from './src/tracking';
 
@@ -56,6 +69,11 @@ export default function App() {
   const { width } = useWindowDimensions();
   const split = width >= SPLIT_MIN_WIDTH;
 
+  const [profiles, setProfiles] = useState<Profile[]>(DEFAULT_PROFILES);
+  const [profileId, setProfileId] = useState(DEFAULT_PROFILES[0].id);
+  const [profilesLoaded, setProfilesLoaded] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showManager, setShowManager] = useState(false);
   const [pageStatus, setPageStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [pageDetail, setPageDetail] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -85,36 +103,93 @@ export default function App() {
     return bridge.current.getJson<T>(path);
   }, []);
 
-  // 저장해 둔 조회 기록·필터·즐겨찾기를 불러온다
+  // 관심 목록과 마지막으로 보던 목록을 불러온다
   useEffect(() => {
     (async () => {
-      const [saved, savedFilters, savedFavs] = await Promise.all([loadResult(), loadFilters(), loadFavorites()]);
-      if (saved) {
-        setHouses(saved.houses);
-        setFetchedAt(new Date(saved.fetchedAt));
-        setComplexNames(saved.complexNames);
-        setComplexFetchedAt(saved.complexFetchedAt ?? {});
-      }
-      if (savedFilters) setFilters({ ...DEFAULT_FILTERS, ...savedFilters });
-      if (savedFavs) setFavorites(savedFavs);
-      setLoaded(true);
+      const [ps, active] = await Promise.all([loadProfiles(), loadActiveProfile()]);
+      setProfiles(ps);
+      setProfileId(ps.find((p) => p.id === active)?.id ?? ps[0].id);
+      setProfilesLoaded(true);
     })();
   }, []);
 
+  // 보고 있는 목록의 조회 기록·필터·즐겨찾기를 불러온다
   useEffect(() => {
-    if (loaded) saveFilters(filters);
-  }, [filters, loaded]);
+    if (!profilesLoaded) return;
+    let alive = true;
+    (async () => {
+      const [saved, savedFilters, savedFavs] = await Promise.all([
+        loadResult(profileId),
+        loadFilters(profileId),
+        loadFavorites(profileId),
+      ]);
+      if (!alive) return;
+      setHouses(saved?.houses ?? []);
+      setFetchedAt(saved ? new Date(saved.fetchedAt) : undefined);
+      setComplexNames(saved?.complexNames ?? {});
+      setComplexFetchedAt(saved?.complexFetchedAt ?? {});
+      setFilters({ ...DEFAULT_FILTERS, ...savedFilters });
+      setFavorites(savedFavs ?? []);
+      setLoaded(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [profileId, profilesLoaded]);
 
   useEffect(() => {
-    if (loaded) saveFavorites(favorites);
-  }, [favorites, loaded]);
+    if (loaded) saveFilters(profileId, filters);
+  }, [filters, loaded, profileId]);
+
+  useEffect(() => {
+    if (loaded) saveFavorites(profileId, favorites);
+  }, [favorites, loaded, profileId]);
+
+  const profile = profiles.find((p) => p.id === profileId) ?? profiles[0];
+  const complexes = profile.complexes;
 
   const persist = (hs: House[], at: Date, names: Record<string, string>, times: Record<string, string>) =>
-    saveResult({ houses: hs, fetchedAt: at.toISOString(), complexNames: names, complexFetchedAt: times });
+    saveResult(profileId, { houses: hs, fetchedAt: at.toISOString(), complexNames: names, complexFetchedAt: times });
 
-  const nameOf = (cn: string) => complexNames[cn] || `단지 ${cn}`;
+  const nameOf = (cn: string) => complexNames[cn] || profile.names?.[cn] || `단지 ${cn}`;
+
+  // 목록 바꾸기: 화면 상태를 비우고 새 목록 데이터를 불러오게 한다
+  const switchProfile = (id: string) => {
+    setShowProfileMenu(false);
+    if (id === profileId || busy) return;
+    setLoaded(false);
+    setHouses([]);
+    setFetchedAt(undefined);
+    setComplexNames({});
+    setComplexFetchedAt({});
+    setFilters(DEFAULT_FILTERS);
+    setFavorites([]);
+    setRawByComplex({});
+    setErrors([]);
+    setExpanded({});
+    setSelectedId(undefined);
+    setProfileId(id);
+    saveActiveProfile(id);
+  };
+
+  const changeProfiles = (ps: Profile[]) => {
+    setProfiles(ps);
+    saveProfiles(ps);
+  };
+
+  const deleteProfile = (id: string) => {
+    const rest = profiles.filter((p) => p.id !== id);
+    if (!rest.length) return;
+    removeProfileData(id);
+    if (id === profileId) switchProfile(rest[0].id);
+    changeProfiles(rest);
+  };
   const rawItems = useMemo(() => Object.values(rawByComplex).flat(), [rawByComplex]);
-  const shown = useMemo(() => houses.filter((h) => !h.hidden), [houses]);
+  // 목록에서 뺀 단지의 기록은 보이지 않게
+  const shown = useMemo(
+    () => houses.filter((h) => !h.hidden && complexes.includes(h.listing.complexNumber)),
+    [houses, complexes],
+  );
   const now = Date.now();
 
   const counts = useMemo(() => {
@@ -158,17 +233,18 @@ export default function App() {
   const selected = split ? (visible.find((h) => h.id === selectedId) ?? visible[0]) : undefined;
 
   const refresh = async () => {
-    if (busy || !bridge.current) return;
+    if (busy || !bridge.current || !complexes.length) return;
+    const tradeTypes = profile.tradeTypes;
     setBusy(true);
     setErrors([]);
     const fresh: Record<string, Listing[]> = {};
     const raw: Record<string, any[]> = {};
     const errs: string[] = [];
-    for (let i = 0; i < COMPLEXES.length; i++) {
-      const cn = COMPLEXES[i];
+    for (let i = 0; i < complexes.length; i++) {
+      const cn = complexes[i];
       setProgress({ index: i, count: 0 });
       try {
-        const result = await bridge.current.collect(cn, TRADE_TYPES, (count) => setProgress({ index: i, count }));
+        const result = await bridge.current.collect(cn, tradeTypes, (count) => setProgress({ index: i, count }));
         raw[cn] = result.items;
         fresh[cn] = parseItems(result.items, cn);
         // 평면도 화면을 빨리 열 수 있게 타입 목록을 미리 받아 둔다 (30일에 한 번)
@@ -176,7 +252,7 @@ export default function App() {
       } catch (e: any) {
         errs.push(`${nameOf(cn)}: ${e?.message ?? String(e)}`);
       }
-      if (i < COMPLEXES.length - 1) await sleep(DELAY_BETWEEN_COMPLEXES_MS);
+      if (i < complexes.length - 1) await sleep(DELAY_BETWEEN_COMPLEXES_MS);
     }
 
     // 실패한 단지는 이전 기록을 그대로 둔다
@@ -223,7 +299,7 @@ export default function App() {
 
   const topPad = (StatusBar.currentHeight ?? 24) + 8;
   const refreshLabel = busy
-    ? `조회 중 ${progress.index + 1}/${COMPLEXES.length} · ${progress.count}건`
+    ? `조회 중 ${progress.index + 1}/${complexes.length} · ${progress.count}건`
     : pageStatus === 'loading'
       ? '준비 중…'
       : '새로고침';
@@ -259,7 +335,7 @@ export default function App() {
               <FilterPanel
                 filters={filters}
                 onChange={setFilters}
-                complexes={COMPLEXES.map((cn) => ({ number: cn, name: nameOf(cn) }))}
+                complexes={complexes.map((cn) => ({ number: cn, name: nameOf(cn) }))}
                 types={typeOptions}
                 ownerCount={shown.filter((h) => h.listing.owner && !h.endedAt).length}
               />
@@ -276,9 +352,18 @@ export default function App() {
         </>
       }
       ListEmptyComponent={
-        <Text style={styles.empty}>
-          {tab === '즐겨찾기' ? '별표를 눌러 즐겨찾기에 추가하세요' : shown.length ? '조건에 맞는 매물이 없어요' : ''}
-        </Text>
+        !complexes.length ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.empty}>{profile.name}에 아직 단지가 없어요</Text>
+            <Pressable style={styles.emptyButton} onPress={() => setShowManager(true)}>
+              <Text style={styles.emptyButtonText}>단지 추가하기</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Text style={styles.empty}>
+            {tab === '즐겨찾기' ? '별표를 눌러 즐겨찾기에 추가하세요' : shown.length ? '조건에 맞는 매물이 없어요' : ''}
+          </Text>
+        )
       }
       renderItem={({ item }) => renderCard(item)}
     />
@@ -334,10 +419,19 @@ export default function App() {
         <View style={[styles.flex, { paddingTop: topPad }]}>
           <View style={styles.header}>
             <View style={styles.flex}>
-              <Text style={styles.title}>과천 전월세</Text>
+              <Pressable
+                style={styles.titleButton}
+                onPress={() => setShowProfileMenu(!showProfileMenu)}
+                accessibilityLabel="관심 목록 바꾸기"
+              >
+                <Text style={styles.title} numberOfLines={1}>
+                  {profile.name}
+                </Text>
+                <Text style={styles.titleCaret}>{showProfileMenu ? '▴' : '▾'}</Text>
+              </Pressable>
               <Text style={styles.subtitle}>
                 {fetchedAt
-                  ? `마지막 조회 ${fetchedAt.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · ${COMPLEXES.length}개 단지 · 전월세 ${activeTotal}건`
+                  ? `마지막 조회 ${fetchedAt.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · ${complexes.length}개 단지 · 전월세 ${activeTotal}건`
                   : '새로고침을 눌러 매물을 불러오세요'}
               </Text>
               {fetchedAt ? (
@@ -356,6 +450,26 @@ export default function App() {
               <Text style={styles.refreshText}>{refreshLabel}</Text>
             </Pressable>
           </View>
+
+          {showProfileMenu ? (
+            <View style={styles.profileMenu}>
+              {profiles.map((p) => (
+                <Pressable key={p.id} style={styles.profileItem} onPress={() => switchProfile(p.id)}>
+                  <Text style={[styles.profileName, p.id === profileId && styles.profileNameOn]}>{p.name}</Text>
+                  <Text style={styles.profileMeta}>단지 {p.complexes.length}곳</Text>
+                </Pressable>
+              ))}
+              <Pressable
+                style={styles.profileItem}
+                onPress={() => {
+                  setShowProfileMenu(false);
+                  setShowManager(true);
+                }}
+              >
+                <Text style={styles.profileManage}>목록·단지 관리</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {errors.length ? (
             <View style={styles.errorBox}>
@@ -412,6 +526,22 @@ export default function App() {
         />
       ) : null}
 
+      {showManager ? (
+        <ProfileManager
+          profiles={profiles}
+          activeId={profileId}
+          nameOf={(p, cn) => (p.id === profileId ? nameOf(cn) : p.names?.[cn] || `단지 ${cn}`)}
+          topPad={topPad}
+          onChange={changeProfiles}
+          onDelete={deleteProfile}
+          onSelect={(id) => {
+            switchProfile(id);
+            setShowManager(false);
+          }}
+          onClose={() => setShowManager(false)}
+        />
+      ) : null}
+
       {viewer ? (
         <ArticleViewer
           url={viewer.url}
@@ -437,7 +567,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.line,
   },
-  title: { fontSize: 21, fontWeight: '700', color: C.ink },
+  titleButton: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', minHeight: 32 },
+  title: { fontSize: 21, fontWeight: '700', color: C.ink, flexShrink: 1 },
+  titleCaret: { fontSize: 14, color: C.muted },
+  profileMenu: { backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line, paddingHorizontal: 16, paddingBottom: 6 },
+  profileItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48, borderTopWidth: 1, borderTopColor: C.line },
+  profileName: { fontSize: 16, color: C.body },
+  profileNameOn: { color: C.accent, fontWeight: '700' },
+  profileMeta: { fontSize: 12, color: C.muted },
+  profileManage: { fontSize: 15, fontWeight: '600', color: C.accent },
+  emptyBox: { alignItems: 'center', gap: 12, paddingVertical: 40 },
+  emptyButton: { height: 44, paddingHorizontal: 18, borderRadius: 22, backgroundColor: C.accent, justifyContent: 'center' },
+  emptyButtonText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
   subtitle: { fontSize: 12, color: C.muted, marginTop: 2 },
   summary: { flexDirection: 'row', gap: 6, marginTop: 8 },
   pill: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, fontSize: 12, fontWeight: '600', overflow: 'hidden' },

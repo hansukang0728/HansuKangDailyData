@@ -1,6 +1,8 @@
-// 조회 기록(집 단위)과 필터·즐겨찾기를 폰에 저장한다 (앱을 다시 켜도 바로 보이게).
+// 관심 목록별 조회 기록(집 단위)·필터·즐겨찾기와 목록 설정을 폰에 저장한다.
+// 목록이 생기기 전(빌드 #12까지)에 저장한 데이터는 과천 목록 것으로 옮겨 온다.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { DEFAULT_PROFILES, GWACHEON_PROFILE_ID, Profile } from './complexes';
 import { Filters } from './filters';
 import { Listing } from './listing';
 import { House, housesFromListings } from './tracking';
@@ -9,6 +11,8 @@ const RESULT_KEY = 'result/v2';
 const LEGACY_RESULT_KEY = 'result/v1';
 const FILTERS_KEY = 'filters/v1';
 const FAVORITES_KEY = 'favorites/v1';
+const PROFILES_KEY = 'profiles/v1';
+const ACTIVE_PROFILE_KEY = 'activeProfile/v1';
 
 export interface SavedResult {
   houses: House[];
@@ -41,10 +45,19 @@ async function save(key: string, value: unknown): Promise<void> {
   }
 }
 
-export async function loadResult(): Promise<SavedResult | undefined> {
-  const saved = await load<SavedResult>(RESULT_KEY);
-  if (saved) return saved;
-  // 빌드 A까지의 형식(매물 목록만 저장)이면 기존 매물로 옮겨 온다
+const keyOf = (base: string, profileId: string) => `${base}:${profileId}`;
+
+// 목록별 값. 과천 목록은 목록 기능 이전 키도 찾아본다
+async function loadFor<T>(base: string, profileId: string): Promise<T | undefined> {
+  const v = await load<T>(keyOf(base, profileId));
+  if (v !== undefined || profileId !== GWACHEON_PROFILE_ID) return v;
+  return load<T>(base);
+}
+
+export async function loadResult(profileId: string): Promise<SavedResult | undefined> {
+  const saved = await loadFor<SavedResult>(RESULT_KEY, profileId);
+  if (saved || profileId !== GWACHEON_PROFILE_ID) return saved;
+  // 빌드 A 형식(매물 목록만 저장)이면 기존 매물로 옮겨 온다
   const legacy = await load<LegacyResult>(LEGACY_RESULT_KEY);
   if (!legacy) return undefined;
   return {
@@ -55,8 +68,25 @@ export async function loadResult(): Promise<SavedResult | undefined> {
   };
 }
 
-export const saveResult = (r: SavedResult) => save(RESULT_KEY, r);
-export const loadFilters = () => load<Filters>(FILTERS_KEY);
-export const saveFilters = (f: Filters) => save(FILTERS_KEY, f);
-export const loadFavorites = () => load<string[]>(FAVORITES_KEY);
-export const saveFavorites = (ids: string[]) => save(FAVORITES_KEY, ids);
+export const saveResult = (profileId: string, r: SavedResult) => save(keyOf(RESULT_KEY, profileId), r);
+export const loadFilters = (profileId: string) => loadFor<Filters>(FILTERS_KEY, profileId);
+export const saveFilters = (profileId: string, f: Filters) => save(keyOf(FILTERS_KEY, profileId), f);
+export const loadFavorites = (profileId: string) => loadFor<string[]>(FAVORITES_KEY, profileId);
+export const saveFavorites = (profileId: string, ids: string[]) => save(keyOf(FAVORITES_KEY, profileId), ids);
+
+export async function loadProfiles(): Promise<Profile[]> {
+  const saved = await load<Profile[]>(PROFILES_KEY);
+  return saved?.length ? saved : DEFAULT_PROFILES;
+}
+export const saveProfiles = (ps: Profile[]) => save(PROFILES_KEY, ps);
+export const loadActiveProfile = () => load<string>(ACTIVE_PROFILE_KEY);
+export const saveActiveProfile = (id: string) => save(ACTIVE_PROFILE_KEY, id);
+
+// 목록을 지울 때 그 목록의 저장 데이터도 지운다
+export async function removeProfileData(profileId: string): Promise<void> {
+  try {
+    await AsyncStorage.multiRemove([RESULT_KEY, FILTERS_KEY, FAVORITES_KEY].map((b) => keyOf(b, profileId)));
+  } catch {
+    // 무시
+  }
+}
