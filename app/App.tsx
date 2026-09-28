@@ -1,5 +1,5 @@
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -13,24 +13,15 @@ import {
 } from 'react-native';
 
 import { ArticleViewer } from './src/ArticleViewer';
+import { Chip } from './src/Chip';
+import { COMPLEXES, DELAY_BETWEEN_COMPLEXES_MS, TRADE_TYPES } from './src/complexes';
+import { FilterPanel } from './src/FilterPanel';
+import { activeCount, DEFAULT_FILTERS, Filters, matches } from './src/filters';
+import { isOwnerArticle, Listing, SortKey, sortListings, toListing, typeKey, typeLabel } from './src/listing';
+import { ListingCard } from './src/ListingCard';
 import { NaverBridge, NaverBridgeHandle } from './src/NaverBridge';
-import { areaLabel, formatPrice, inTargetArea, isOwnerArticle, Listing, SortKey, sortListings, toListing } from './src/listing';
-
-// 샘플 단계: 단지 하나로 수집이 되는지부터 확인한다
-const COMPLEX_NUMBER = '127071';
-const TRADE_TYPES = ['B1', 'B2']; // 전세, 월세
-
-const C = {
-  ground: '#F5F3EE',
-  surface: '#FFFFFF',
-  ink: '#1C1B19',
-  muted: '#5E5B55',
-  line: '#E4E0D8',
-  accent: '#0E6560',
-  accentSoft: '#E3F0EE',
-  rent: '#8A3E05',
-  error: '#A1321F',
-};
+import { loadFilters, loadResult, saveFilters, saveResult } from './src/storage';
+import { C } from './src/theme';
 
 type Tab = '전체' | '전세' | '월세';
 const TABS: Tab[] = ['전체', '전세', '월세'];
@@ -40,6 +31,20 @@ const SORTS: [SortKey, string][] = [
   ['depositAsc', '보증금 낮은순'],
 ];
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function parseItems(items: any[], complexNumber: string): Listing[] {
+  const out: Listing[] = [];
+  for (const item of items) {
+    try {
+      out.push(toListing(item, complexNumber));
+    } catch {
+      // 형태가 다른 항목은 원본 데이터 화면에서 확인
+    }
+  }
+  return out;
+}
+
 export default function App() {
   const bridge = useRef<NaverBridgeHandle>(null);
   const { width } = useWindowDimensions();
@@ -48,54 +53,102 @@ export default function App() {
   const [pageStatus, setPageStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [pageDetail, setPageDetail] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string>();
-  const [rawItems, setRawItems] = useState<any[]>([]);
+  const [progress, setProgress] = useState({ index: 0, count: 0 });
+  const [errors, setErrors] = useState<string[]>([]);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [rawByComplex, setRawByComplex] = useState<Record<string, any[]>>({});
   const [fetchedAt, setFetchedAt] = useState<Date>();
+  const [complexNames, setComplexNames] = useState<Record<string, string>>({});
+  const [complexFetchedAt, setComplexFetchedAt] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [loaded, setLoaded] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [tab, setTab] = useState<Tab>('전체');
   const [sort, setSort] = useState<SortKey>('rentAsc');
-  const [areaFilter, setAreaFilter] = useState(true);
-  const [ownerOnly, setOwnerOnly] = useState(false);
   const [screen, setScreen] = useState<'list' | 'raw'>('list');
   const [showNaver, setShowNaver] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [viewer, setViewer] = useState<{ articleNumber: string; title: string }>();
 
-  const listings = useMemo(() => {
-    const out: Listing[] = [];
-    for (const item of rawItems) {
-      try {
-        out.push(toListing(item));
-      } catch {
-        // 형태가 다른 항목은 원본 데이터 화면에서 확인
+  // 저장해 둔 마지막 조회 결과와 필터를 불러온다
+  useEffect(() => {
+    (async () => {
+      const [saved, savedFilters] = await Promise.all([loadResult(), loadFilters()]);
+      if (saved) {
+        setListings(saved.listings);
+        setFetchedAt(new Date(saved.fetchedAt));
+        setComplexNames(saved.complexNames);
+        setComplexFetchedAt(saved.complexFetchedAt ?? {});
       }
-    }
-    return out;
-  }, [rawItems]);
+      if (savedFilters) setFilters({ ...DEFAULT_FILTERS, ...savedFilters });
+      setLoaded(true);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (loaded) saveFilters(filters);
+  }, [filters, loaded]);
+
+  const nameOf = (cn: string) => complexNames[cn] || `단지 ${cn}`;
+  const rawItems = useMemo(() => Object.values(rawByComplex).flat(), [rawByComplex]);
 
   const visible = useMemo(() => {
-    const filtered = listings.filter(
-      (l) => (tab === '전체' || l.kind === tab) && (!areaFilter || inTargetArea(l)) && (!ownerOnly || l.owner),
-    );
+    const filtered = listings.filter((l) => (tab === '전체' || l.kind === tab) && matches(l, filters));
     return sortListings(filtered, sort);
-  }, [listings, tab, sort, areaFilter, ownerOnly]);
+  }, [listings, tab, sort, filters]);
 
-  const complexName = listings[0]?.complexName || `단지 ${COMPLEX_NUMBER}`;
+  // 타입 칩: 고른 단지·면적 조건 안에서 실제로 있는 타입만 보여준다
+  const typeOptions = useMemo(() => {
+    const base = listings.filter((l) => matches(l, { ...filters, types: [], depositMax: null, rentMax: null, ownerOnly: false }));
+    const map = new Map<string, { key: string; label: string; count: number; area: number }>();
+    for (const l of base) {
+      const k = typeKey(l);
+      const cur = map.get(k) ?? { key: k, label: typeLabel(l), count: 0, area: l.exclusiveSpace };
+      cur.count++;
+      map.set(k, cur);
+    }
+    return [...map.values()].sort((a, b) => a.area - b.area || a.label.localeCompare(b.label));
+  }, [listings, filters]);
 
   const refresh = async () => {
     if (busy || !bridge.current) return;
     setBusy(true);
-    setError(undefined);
-    setProgress(0);
-    try {
-      const result = await bridge.current.collect(COMPLEX_NUMBER, TRADE_TYPES, setProgress);
-      setRawItems(result.items);
-      setFetchedAt(new Date());
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
-    } finally {
-      setBusy(false);
+    setErrors([]);
+    const fresh: Record<string, Listing[]> = {};
+    const raw: Record<string, any[]> = {};
+    const errs: string[] = [];
+    for (let i = 0; i < COMPLEXES.length; i++) {
+      const cn = COMPLEXES[i];
+      setProgress({ index: i, count: 0 });
+      try {
+        const result = await bridge.current.collect(cn, TRADE_TYPES, (count) => setProgress({ index: i, count }));
+        raw[cn] = result.items;
+        fresh[cn] = parseItems(result.items, cn);
+      } catch (e: any) {
+        errs.push(`${nameOf(cn)}: ${e?.message ?? String(e)}`);
+      }
+      if (i < COMPLEXES.length - 1) await sleep(DELAY_BETWEEN_COMPLEXES_MS);
     }
+
+    // 실패한 단지는 이전 결과를 그대로 둔다
+    const now = new Date();
+    const merged = [...listings.filter((l) => !(l.complexNumber in fresh)), ...Object.values(fresh).flat()];
+    const names = { ...complexNames };
+    const times = { ...complexFetchedAt };
+    for (const [cn, ls] of Object.entries(fresh)) {
+      if (ls[0]?.complexName) names[cn] = ls[0].complexName;
+      times[cn] = now.toISOString();
+    }
+    setListings(merged);
+    setRawByComplex({ ...rawByComplex, ...raw });
+    setComplexNames(names);
+    setComplexFetchedAt(times);
+    setErrors(errs);
+    if (Object.keys(fresh).length) {
+      setFetchedAt(now);
+      saveResult({ listings: merged, fetchedAt: now.toISOString(), complexNames: names, complexFetchedAt: times });
+    }
+    setBusy(false);
   };
 
   const shareRaw = () => {
@@ -105,16 +158,17 @@ export default function App() {
     const rest = rawItems.filter((i) => !owner.includes(i) && !withDup.includes(i)).slice(0, 3 - owner.length - withDup.length);
     const sample = JSON.stringify([...owner, ...withDup, ...rest], null, 1);
     Share.share({
-      message: `단지 ${COMPLEX_NUMBER} 원본 ${rawItems.length}건 중 3건 (집주인 매물, 중개사 여러 곳 매물 포함)\n\n${sample.slice(0, 60000)}`,
+      message: `원본 ${rawItems.length}건 중 3건 (집주인 매물, 중개사 여러 곳 매물 포함)\n\n${sample.slice(0, 60000)}`,
     });
   };
 
   const topPad = (StatusBar.currentHeight ?? 24) + 8;
   const refreshLabel = busy
-    ? `조회 중… ${progress}건`
+    ? `조회 중 ${progress.index + 1}/${COMPLEXES.length} · ${progress.count}건`
     : pageStatus === 'loading'
       ? '준비 중…'
       : '새로고침';
+  const filterCount = activeCount(filters);
 
   return (
     <View style={styles.root}>
@@ -145,23 +199,17 @@ export default function App() {
             <Text style={styles.rawTitle}>원본 데이터</Text>
           </View>
           <View style={styles.rawActions}>
-            <Pressable style={styles.chipOn} onPress={shareRaw} disabled={rawItems.length === 0}>
-              <Text style={styles.chipOnText}>원본 공유하기</Text>
-            </Pressable>
-            <Pressable style={styles.chip} onPress={() => setShowNaver(true)}>
-              <Text style={styles.chipText}>네이버 페이지 보기</Text>
-            </Pressable>
-            <Pressable style={styles.chip} onPress={() => bridge.current?.reload()}>
-              <Text style={styles.chipText}>페이지 다시 열기</Text>
-            </Pressable>
+            <Chip label="원본 공유하기" on onPress={shareRaw} />
+            <Chip label="네이버 페이지 보기" on={false} onPress={() => setShowNaver(true)} />
+            <Chip label="페이지 다시 열기" on={false} onPress={() => bridge.current?.reload()} />
           </View>
           <Text style={styles.rawMeta}>
             페이지 상태: {pageStatus}
-            {pageDetail ? ` (${pageDetail})` : ''} · 받은 항목 {rawItems.length}건 · 해석된 매물 {listings.length}건 · 집주인 판정 {listings.filter((l) => l.owner).length}건
+            {pageDetail ? ` (${pageDetail})` : ''} · 이번 실행에서 받은 항목 {rawItems.length}건 · 저장된 매물 {listings.length}건 · 집주인 판정 {listings.filter((l) => l.owner).length}건
           </Text>
           <ScrollView style={styles.rawBox} contentContainerStyle={{ padding: 12 }}>
             <Text selectable style={styles.rawText}>
-              {rawItems.length ? JSON.stringify(rawItems.find((i) => i?.duplicatedArticleInfo) ?? rawItems[0], null, 2) : '아직 받은 데이터가 없어요. 목록에서 새로고침을 눌러주세요.'}
+              {rawItems.length ? JSON.stringify(rawItems.find((i) => i?.duplicatedArticleInfo) ?? rawItems[0], null, 2) : '이번 실행에서 받은 데이터가 없어요. 목록에서 새로고침을 눌러주세요.'}
             </Text>
           </ScrollView>
         </View>
@@ -169,10 +217,10 @@ export default function App() {
         <View style={[styles.flex, { paddingTop: topPad }]}>
           <View style={styles.header}>
             <View style={styles.flex}>
-              <Text style={styles.title}>{complexName}</Text>
+              <Text style={styles.title}>과천 전월세</Text>
               <Text style={styles.subtitle}>
                 {fetchedAt
-                  ? `마지막 조회 ${fetchedAt.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · 전월세 ${listings.length}건`
+                  ? `마지막 조회 ${fetchedAt.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · ${COMPLEXES.length}개 단지 · 전월세 ${listings.length}건`
                   : '새로고침을 눌러 매물을 불러오세요'}
               </Text>
             </View>
@@ -185,10 +233,14 @@ export default function App() {
             </Pressable>
           </View>
 
-          {error ? (
+          {errors.length ? (
             <View style={styles.errorBox}>
-              <Text style={styles.errorText}>조회 실패: {error}</Text>
-              <Text style={styles.errorHint}>원본 데이터 화면에서 "네이버 페이지 보기"로 페이지 상태를 확인할 수 있어요.</Text>
+              {errors.map((e) => (
+                <Text key={e} style={styles.errorText}>
+                  조회 실패 · {e}
+                </Text>
+              ))}
+              <Text style={styles.errorHint}>실패한 단지는 이전 조회 결과를 그대로 보여줘요. 잠시 뒤 다시 새로고침해 주세요.</Text>
             </View>
           ) : null}
 
@@ -201,20 +253,15 @@ export default function App() {
           </View>
 
           <ScrollView horizontal style={styles.chipRowWrap} contentContainerStyle={styles.chipRow} showsHorizontalScrollIndicator={false}>
-            <Pressable style={areaFilter ? styles.chipOn : styles.chip} onPress={() => setAreaFilter(!areaFilter)}>
-              <Text style={areaFilter ? styles.chipOnText : styles.chipText}>전용 59–84㎡</Text>
-            </Pressable>
-            <Pressable style={ownerOnly ? styles.chipOn : styles.chip} onPress={() => setOwnerOnly(!ownerOnly)}>
-              <Text style={ownerOnly ? styles.chipOnText : styles.chipText}>집주인만 {listings.filter((l) => l.owner).length}</Text>
-            </Pressable>
+            <Chip
+              label={`필터${filterCount ? ` ${filterCount}` : ''} ${showFilters ? '▴' : '▾'}`}
+              on={showFilters || filterCount > 0}
+              onPress={() => setShowFilters(!showFilters)}
+            />
             {SORTS.map(([key, label]) => (
-              <Pressable key={key} style={sort === key ? styles.sortOn : styles.chip} onPress={() => setSort(key)}>
-                <Text style={sort === key ? styles.sortOnText : styles.chipText}>{label}</Text>
-              </Pressable>
+              <Chip key={key} label={label} variant="sort" on={sort === key} onPress={() => setSort(key)} />
             ))}
-            <Pressable style={styles.chip} onPress={() => setScreen('raw')}>
-              <Text style={styles.chipText}>원본 데이터</Text>
-            </Pressable>
+            <Chip label="원본 데이터" on={false} onPress={() => setScreen('raw')} />
           </ScrollView>
 
           <FlatList
@@ -224,82 +271,34 @@ export default function App() {
             keyExtractor={(l) => l.articleNumber}
             contentContainerStyle={styles.list}
             columnWrapperStyle={columns > 1 ? { gap: 10 } : undefined}
-            ListHeaderComponent={<Text style={styles.count}>매물 {visible.length}건</Text>}
-            ListEmptyComponent={
-              <Text style={styles.empty}>{rawItems.length ? '조건에 맞는 매물이 없어요' : ''}</Text>
-            }
-            renderItem={({ item: l }) => {
-              const open = !!expanded[l.articleNumber];
-              return (
-                <Pressable
-                  style={[styles.card, columns > 1 && styles.flex]}
-                  onPress={() => setExpanded({ ...expanded, [l.articleNumber]: !open })}
-                >
-                  <View style={styles.areaRow}>
-                    <View style={styles.areaBadge}>
-                      <Text style={styles.areaText}>전용 {areaLabel(l)}㎡</Text>
-                    </View>
-                    {l.typeName ? (
-                      <View style={styles.typeBadge}>
-                        <Text style={styles.typeText}>{l.typeName}타입</Text>
-                      </View>
-                    ) : null}
-                    {l.owner ? (
-                      <View style={styles.ownerBadge}>
-                        <Text style={styles.ownerText}>집주인</Text>
-                      </View>
-                    ) : null}
-                    <View style={styles.flex} />
-                    <Text style={[styles.kind, { color: l.kind === '월세' ? C.rent : C.accent }]}>{l.kind}</Text>
+            ListHeaderComponent={
+              <>
+                {showFilters ? (
+                  <View style={styles.panelWrap}>
+                    <FilterPanel
+                      filters={filters}
+                      onChange={setFilters}
+                      complexes={COMPLEXES.map((cn) => ({ number: cn, name: nameOf(cn) }))}
+                      types={typeOptions}
+                      ownerCount={listings.filter((l) => l.owner).length}
+                    />
                   </View>
-                  <Text style={styles.price}>{formatPrice(l)}</Text>
-                  <Text style={styles.spec}>
-                    {[l.dong && `${l.dong}동`, l.floor, l.direction, `공급 ${l.supplySpace}㎡`].filter(Boolean).join(' · ')}
-                  </Text>
-                  {open ? (
-                    <View style={styles.brokerList}>
-                      <Text style={styles.brokerHeading}>중개사 {l.brokerArticles.length}곳 · 중개사별 설명</Text>
-                      {l.brokerArticles.map((b) => (
-                        <View key={b.articleNumber || b.broker} style={styles.brokerItem}>
-                          <View style={styles.brokerTop}>
-                            <Text style={styles.brokerName} numberOfLines={1}>
-                              {b.broker || '중개사'}
-                            </Text>
-                            {b.owner ? (
-                              <View style={styles.ownerBadge}>
-                                <Text style={styles.ownerText}>집주인</Text>
-                              </View>
-                            ) : null}
-                            {b.articleNumber ? (
-                              <Pressable
-                                style={styles.viewButton}
-                                onPress={() => setViewer({ articleNumber: b.articleNumber, title: b.broker || '매물' })}
-                              >
-                                <Text style={styles.viewButtonText}>전체 설명 보기</Text>
-                              </Pressable>
-                            ) : null}
-                          </View>
-                          <Text style={styles.feature}>{b.feature || '목록에 설명이 없어요. 전체 설명 보기를 눌러주세요.'}</Text>
-                          {b.confirmDate ? <Text style={styles.meta}>확인일 {b.confirmDate}</Text> : null}
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    <>
-                      {l.feature ? (
-                        <Text style={styles.feature} numberOfLines={2}>
-                          {l.feature}
-                        </Text>
-                      ) : null}
-                      <Text style={styles.brokers} numberOfLines={1}>
-                        중개사 {l.brokers.length}곳: {l.brokers.join(', ')}
-                      </Text>
-                      <Text style={styles.hint}>눌러서 중개사별 설명 보기</Text>
-                    </>
-                  )}
-                </Pressable>
-              );
-            }}
+                ) : null}
+                <Text style={styles.count}>매물 {visible.length}건</Text>
+              </>
+            }
+            ListEmptyComponent={
+              <Text style={styles.empty}>{listings.length ? '조건에 맞는 매물이 없어요' : ''}</Text>
+            }
+            renderItem={({ item: l }) => (
+              <ListingCard
+                listing={l}
+                open={!!expanded[l.articleNumber]}
+                wide={columns > 1}
+                onToggle={() => setExpanded({ ...expanded, [l.articleNumber]: !expanded[l.articleNumber] })}
+                onOpenArticle={(articleNumber, title) => setViewer({ articleNumber, title })}
+              />
+            )}
           />
         </View>
       )}
@@ -335,7 +334,7 @@ const styles = StyleSheet.create({
   refreshDisabled: { opacity: 0.6 },
   refreshText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   errorBox: { margin: 12, padding: 12, borderRadius: 12, backgroundColor: '#FBE9E6' },
-  errorText: { color: C.error, fontSize: 13, fontWeight: '600' },
+  errorText: { color: C.error, fontSize: 13, fontWeight: '600', marginBottom: 2 },
   errorHint: { color: C.muted, fontSize: 12, marginTop: 4 },
   tabs: { flexDirection: 'row', backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line },
   tab: { flex: 1, height: 46, alignItems: 'center', justifyContent: 'center' },
@@ -344,40 +343,13 @@ const styles = StyleSheet.create({
   tabTextOn: { color: C.accent, fontWeight: '700' },
   chipRowWrap: { flexGrow: 0 },
   chipRow: { gap: 6, paddingHorizontal: 16, paddingVertical: 10 },
-  chip: { height: 34, paddingHorizontal: 12, borderRadius: 17, borderWidth: 1, borderColor: '#D6D1C7', backgroundColor: C.surface, justifyContent: 'center' },
-  chipText: { fontSize: 13, color: '#3A3833' },
-  chipOn: { height: 34, paddingHorizontal: 12, borderRadius: 17, borderWidth: 1, borderColor: C.accent, backgroundColor: C.accentSoft, justifyContent: 'center' },
-  chipOnText: { fontSize: 13, color: '#0A4A46', fontWeight: '600' },
-  sortOn: { height: 34, paddingHorizontal: 12, borderRadius: 17, backgroundColor: C.ink, justifyContent: 'center' },
-  sortOnText: { fontSize: 13, color: '#FFFFFF', fontWeight: '600' },
   list: { paddingHorizontal: 16, paddingBottom: 32, gap: 10 },
   count: { fontSize: 13, color: C.muted, marginBottom: 2 },
   empty: { textAlign: 'center', color: C.muted, paddingVertical: 40 },
-  card: { padding: 14, borderRadius: 14, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface, gap: 4 },
-  areaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  areaBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: C.accentSoft },
-  areaText: { fontSize: 17, fontWeight: '800', color: '#0A4A46' },
-  typeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: C.ink },
-  typeText: { fontSize: 17, fontWeight: '800', color: '#FFFFFF' },
-  ownerBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: '#EEE8F8' },
-  ownerText: { fontSize: 13, fontWeight: '700', color: '#4B2D86' },
-  kind: { fontSize: 14, fontWeight: '700' },
-  price: { fontSize: 21, fontWeight: '700', color: C.ink, marginTop: 4 },
-  hint: { fontSize: 11, color: C.accent, marginTop: 2 },
-  brokerList: { marginTop: 8, gap: 8 },
-  brokerHeading: { fontSize: 13, fontWeight: '700', color: C.ink },
-  brokerItem: { padding: 10, borderRadius: 10, backgroundColor: C.ground, gap: 4 },
-  brokerTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  brokerName: { flex: 1, fontSize: 14, fontWeight: '600', color: C.ink },
-  viewButton: { height: 32, paddingHorizontal: 10, borderRadius: 16, backgroundColor: C.accent, justifyContent: 'center' },
-  viewButtonText: { fontSize: 12, color: '#FFFFFF', fontWeight: '600' },
-  spec: { fontSize: 13, color: '#3A3833' },
-  feature: { fontSize: 13, lineHeight: 19, color: C.muted, marginTop: 2 },
-  brokers: { fontSize: 12, color: C.muted, marginTop: 2 },
-  meta: { fontSize: 11, color: C.muted },
+  panelWrap: { marginHorizontal: -16 },
   naverBar: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8, backgroundColor: C.surface },
   naverBarText: { fontSize: 15, fontWeight: '600', color: C.ink },
-  smallButton: { height: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: '#D6D1C7', justifyContent: 'center', backgroundColor: C.surface },
+  smallButton: { height: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: C.lineStrong, justifyContent: 'center', backgroundColor: C.surface },
   smallButtonText: { fontSize: 13, color: C.ink },
   rawHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 8 },
   rawTitle: { fontSize: 18, fontWeight: '700', color: C.ink },

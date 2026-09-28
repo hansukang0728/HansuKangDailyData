@@ -41,8 +41,11 @@ python3 molit_trade.py --months 3
 WebView가 네이버 지도 페이지를 열고, 그 페이지 안에서 매물 API를 호출해 전세·월세 매물을
 가져온다 (`crawl_complex.py`와 같은 방식이라 서버가 필요 없음).
 
-- 현재는 샘플 단계: 단지 127071 하나, 전세(B1)·월세(B2)
-- `app/src/NaverBridge.tsx`: WebView 수집기, `app/src/listing.ts`: 응답 해석·정렬·필터
+- 대상: `app/src/complexes.ts`의 과천 4개 단지, 전세(B1)·월세(B2). 새로고침 한 번에 단지를
+  차례로 조회하고(단지 사이 2.5초 대기), 실패한 단지는 이전 결과를 유지
+- 마지막 조회 결과와 필터 설정은 폰에 저장 (`app/src/storage.ts`)
+- 필터: 단지, 전용 59–84㎡, 타입, 보증금·월세 상한, 집주인만 (`app/src/filters.ts`)
+- `app/src/NaverBridge.tsx`: WebView 수집기, `app/src/listing.ts`: 응답 해석·정렬
 - "원본 데이터" 화면에서 네이버 응답 원본을 보고 공유할 수 있음 (필드 확인용)
 - APK 빌드: `app/**`가 바뀌어 푸시되면 `.github/workflows/android-apk.yml`이 빌드해서
   GitHub Releases에 "앱 빌드 #N"으로 올린다

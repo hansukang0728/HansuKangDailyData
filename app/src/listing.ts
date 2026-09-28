@@ -15,6 +15,7 @@ export interface BrokerArticle {
 
 export interface Listing {
   articleNumber: string;
+  complexNumber: string;
   complexName: string;
   dong: string;
   floor: string;
@@ -61,7 +62,7 @@ export function isOwnerArticle(x: any, depth = 0): boolean {
   return false;
 }
 
-export function toListing(item: any): Listing {
+export function toListing(item: any, complexNumber: string): Listing {
   const a = item.representativeArticleInfo ?? item;
   const detail = a.articleDetail ?? {};
   const floorDetail = detail.floorDetailInfo ?? {};
@@ -89,6 +90,7 @@ export function toListing(item: any): Listing {
 
   return {
     articleNumber: String(a.articleNumber ?? ''),
+    complexNumber,
     complexName: a.complexName ?? '',
     dong: a.dongName ?? '',
     floor: target && total ? `${target}/${total}층` : detail.floorInfo ?? '',
@@ -145,4 +147,13 @@ export function articleUrl(articleNumber: string): string {
 // 전용면적 표시: 84.28 -> "84"
 export function areaLabel(l: Listing): string {
   return String(Math.floor(l.exclusiveSpace));
+}
+
+// 타입 필터용 키와 표시: "84L" / "84㎡ L"
+export function typeKey(l: Listing): string {
+  return `${areaLabel(l)}${l.typeName}`;
+}
+
+export function typeLabel(l: Listing): string {
+  return l.typeName ? `${areaLabel(l)}㎡ ${l.typeName}` : `${areaLabel(l)}㎡`;
 }
