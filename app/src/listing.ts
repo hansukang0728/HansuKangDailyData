@@ -4,6 +4,14 @@
 
 export type TradeKind = '전세' | '월세';
 
+// 같은 집을 올린 중개사 한 곳의 매물
+export interface BrokerArticle {
+  articleNumber: string;
+  broker: string;
+  feature: string; // 이 중개사가 쓴 한 줄 설명 (목록 응답에 있을 때만)
+  confirmDate: string;
+}
+
 export interface Listing {
   articleNumber: string;
   complexName: string;
@@ -18,6 +26,7 @@ export interface Listing {
   rent: number; // 원 (전세는 0)
   feature: string;
   brokers: string[];
+  brokerArticles: BrokerArticle[];
   confirmDate: string;
 }
 
@@ -48,9 +57,14 @@ export function toListing(item: any): Listing {
   const kind: TradeKind = tradeType === 'B2' || rent > 0 ? '월세' : '전세';
 
   const dup = item.duplicatedArticleInfo;
-  const brokers: string[] = dup?.articleInfoList?.length
-    ? dup.articleInfoList.map((x: any) => x?.brokerInfo?.brokerageName).filter(Boolean)
-    : [a.brokerInfo?.brokerageName].filter(Boolean);
+  const sources: any[] = dup?.articleInfoList?.length ? dup.articleInfoList : [a];
+  const brokerArticles: BrokerArticle[] = sources.map((x: any) => ({
+    articleNumber: String(x?.articleNumber ?? ''),
+    broker: x?.brokerInfo?.brokerageName ?? '',
+    feature: x?.articleDetail?.articleFeatureDescription ?? x?.articleFeatureDescription ?? '',
+    confirmDate: x?.verificationInfo?.articleConfirmDate ?? '',
+  }));
+  const brokers = brokerArticles.map((b) => b.broker).filter(Boolean);
 
   const target = floorDetail.targetFloor;
   const total = floorDetail.totalFloor;
@@ -69,6 +83,7 @@ export function toListing(item: any): Listing {
     rent,
     feature: detail.articleFeatureDescription ?? '',
     brokers,
+    brokerArticles,
     confirmDate: a.verificationInfo?.articleConfirmDate ?? '',
   };
 }
@@ -101,4 +116,14 @@ export function sortListings(list: Listing[], key: SortKey): Listing[] {
 // 전용 59~84㎡ 타입: 84.99㎡까지 포함
 export function inTargetArea(l: Listing): boolean {
   return l.exclusiveSpace >= 59 && l.exclusiveSpace < 85;
+}
+
+// 네이버 부동산 매물 페이지 주소
+export function articleUrl(articleNumber: string): string {
+  return `https://fin.land.naver.com/articles/${articleNumber}`;
+}
+
+// 전용면적 표시: 84.28 -> "84"
+export function areaLabel(l: Listing): string {
+  return String(Math.floor(l.exclusiveSpace));
 }

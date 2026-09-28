@@ -12,8 +12,9 @@ import {
   View,
 } from 'react-native';
 
+import { ArticleViewer } from './src/ArticleViewer';
 import { NaverBridge, NaverBridgeHandle } from './src/NaverBridge';
-import { formatPrice, inTargetArea, Listing, SortKey, sortListings, toListing } from './src/listing';
+import { areaLabel, formatPrice, inTargetArea, Listing, SortKey, sortListings, toListing } from './src/listing';
 
 // 샘플 단계: 단지 하나로 수집이 되는지부터 확인한다
 const COMPLEX_NUMBER = '127071';
@@ -57,6 +58,7 @@ export default function App() {
   const [screen, setScreen] = useState<'list' | 'raw'>('list');
   const [showNaver, setShowNaver] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [viewer, setViewer] = useState<{ articleNumber: string; title: string }>();
 
   const listings = useMemo(() => {
     const out: Listing[] = [];
@@ -96,9 +98,10 @@ export default function App() {
   };
 
   const shareRaw = () => {
-    const sample = JSON.stringify(rawItems.slice(0, 3), null, 1);
+    const withDup = rawItems.filter((i) => i?.duplicatedArticleInfo).slice(0, 2);
+    const sample = JSON.stringify([...withDup, ...rawItems.slice(0, 3 - withDup.length)], null, 1);
     Share.share({
-      message: `단지 ${COMPLEX_NUMBER} 원본 ${rawItems.length}건 중 앞 3건\n\n${sample.slice(0, 60000)}`,
+      message: `단지 ${COMPLEX_NUMBER} 원본 ${rawItems.length}건 중 3건 (중개사 여러 곳 매물 우선)\n\n${sample.slice(0, 60000)}`,
     });
   };
 
@@ -154,7 +157,7 @@ export default function App() {
           </Text>
           <ScrollView style={styles.rawBox} contentContainerStyle={{ padding: 12 }}>
             <Text selectable style={styles.rawText}>
-              {rawItems.length ? JSON.stringify(rawItems[0], null, 2) : '아직 받은 데이터가 없어요. 목록에서 새로고침을 눌러주세요.'}
+              {rawItems.length ? JSON.stringify(rawItems.find((i) => i?.duplicatedArticleInfo) ?? rawItems[0], null, 2) : '아직 받은 데이터가 없어요. 목록에서 새로고침을 눌러주세요.'}
             </Text>
           </ScrollView>
         </View>
@@ -225,31 +228,73 @@ export default function App() {
                   style={[styles.card, columns > 1 && styles.flex]}
                   onPress={() => setExpanded({ ...expanded, [l.articleNumber]: !open })}
                 >
-                  <View style={styles.row}>
+                  <View style={styles.areaRow}>
+                    <View style={styles.areaBadge}>
+                      <Text style={styles.areaText}>전용 {areaLabel(l)}㎡</Text>
+                    </View>
+                    {l.typeName ? (
+                      <View style={styles.typeBadge}>
+                        <Text style={styles.typeText}>{l.typeName}타입</Text>
+                      </View>
+                    ) : null}
+                    <View style={styles.flex} />
                     <Text style={[styles.kind, { color: l.kind === '월세' ? C.rent : C.accent }]}>{l.kind}</Text>
-                    <Text style={styles.price}>{formatPrice(l)}</Text>
                   </View>
+                  <Text style={styles.price}>{formatPrice(l)}</Text>
                   <Text style={styles.spec}>
-                    {[l.dong && `${l.dong}동`, l.floor, l.direction].filter(Boolean).join(' · ')}
+                    {[l.dong && `${l.dong}동`, l.floor, l.direction, `공급 ${l.supplySpace}㎡`].filter(Boolean).join(' · ')}
                   </Text>
-                  <Text style={styles.spec}>
-                    전용 {l.exclusiveSpace}㎡ · 공급 {l.supplySpace}㎡{l.typeName ? ` · ${l.typeName}타입` : ''}
-                  </Text>
-                  {l.feature ? (
-                    <Text style={styles.feature} numberOfLines={open ? undefined : 2}>
-                      {l.feature}
-                    </Text>
-                  ) : null}
-                  <Text style={styles.brokers} numberOfLines={open ? undefined : 1}>
-                    중개사 {l.brokers.length}곳: {l.brokers.join(', ')}
-                  </Text>
-                  {l.confirmDate ? <Text style={styles.meta}>확인일 {l.confirmDate}</Text> : null}
+                  {open ? (
+                    <View style={styles.brokerList}>
+                      <Text style={styles.brokerHeading}>중개사 {l.brokerArticles.length}곳 · 중개사별 설명</Text>
+                      {l.brokerArticles.map((b) => (
+                        <View key={b.articleNumber || b.broker} style={styles.brokerItem}>
+                          <View style={styles.brokerTop}>
+                            <Text style={styles.brokerName} numberOfLines={1}>
+                              {b.broker || '중개사'}
+                            </Text>
+                            {b.articleNumber ? (
+                              <Pressable
+                                style={styles.viewButton}
+                                onPress={() => setViewer({ articleNumber: b.articleNumber, title: b.broker || '매물' })}
+                              >
+                                <Text style={styles.viewButtonText}>전체 설명 보기</Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                          <Text style={styles.feature}>{b.feature || '목록에 설명이 없어요. 전체 설명 보기를 눌러주세요.'}</Text>
+                          {b.confirmDate ? <Text style={styles.meta}>확인일 {b.confirmDate}</Text> : null}
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <>
+                      {l.feature ? (
+                        <Text style={styles.feature} numberOfLines={2}>
+                          {l.feature}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.brokers} numberOfLines={1}>
+                        중개사 {l.brokers.length}곳: {l.brokers.join(', ')}
+                      </Text>
+                      <Text style={styles.hint}>눌러서 중개사별 설명 보기</Text>
+                    </>
+                  )}
                 </Pressable>
               );
             }}
           />
         </View>
       )}
+
+      {viewer ? (
+        <ArticleViewer
+          articleNumber={viewer.articleNumber}
+          title={viewer.title}
+          topPad={topPad}
+          onClose={() => setViewer(undefined)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -292,9 +337,21 @@ const styles = StyleSheet.create({
   count: { fontSize: 13, color: C.muted, marginBottom: 2 },
   empty: { textAlign: 'center', color: C.muted, paddingVertical: 40 },
   card: { padding: 14, borderRadius: 14, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface, gap: 4 },
-  row: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  kind: { fontSize: 13, fontWeight: '700' },
-  price: { fontSize: 19, fontWeight: '700', color: C.ink },
+  areaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  areaBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: C.accentSoft },
+  areaText: { fontSize: 17, fontWeight: '800', color: '#0A4A46' },
+  typeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: C.ink },
+  typeText: { fontSize: 17, fontWeight: '800', color: '#FFFFFF' },
+  kind: { fontSize: 14, fontWeight: '700' },
+  price: { fontSize: 21, fontWeight: '700', color: C.ink, marginTop: 4 },
+  hint: { fontSize: 11, color: C.accent, marginTop: 2 },
+  brokerList: { marginTop: 8, gap: 8 },
+  brokerHeading: { fontSize: 13, fontWeight: '700', color: C.ink },
+  brokerItem: { padding: 10, borderRadius: 10, backgroundColor: C.ground, gap: 4 },
+  brokerTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  brokerName: { flex: 1, fontSize: 14, fontWeight: '600', color: C.ink },
+  viewButton: { height: 32, paddingHorizontal: 10, borderRadius: 16, backgroundColor: C.accent, justifyContent: 'center' },
+  viewButtonText: { fontSize: 12, color: '#FFFFFF', fontWeight: '600' },
   spec: { fontSize: 13, color: '#3A3833' },
   feature: { fontSize: 13, lineHeight: 19, color: C.muted, marginTop: 2 },
   brokers: { fontSize: 12, color: C.muted, marginTop: 2 },

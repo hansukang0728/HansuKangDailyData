@@ -11,7 +11,7 @@ export const MAP_URL =
   'akyz0EACwAK9Ri1jgITAGrkMJOADMSGOdVIAjOGHpEICbNOp1iAVzoA7EpaewidG5YUgC6QA';
 
 // PC 크롬으로 보이게 해야 PC 수집기와 같은 응답을 받는다
-const DESKTOP_UA =
+export const DESKTOP_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36';
 
