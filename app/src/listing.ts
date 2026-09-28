@@ -58,11 +58,17 @@ function firstNumber(obj: any, keys: string[]): number {
   return 0;
 }
 
-// 집주인 확인 매물 여부. 네이버가 어떤 필드로 주는지 아직 확인하지 못해서
-// owner가 들어간 키가 true이거나, 값에 OWNER / 집주인이 들어 있으면 집주인 매물로 본다.
-// 원본 데이터로 실제 필드를 확인하면 그 필드만 보도록 좁힐 것.
+// 네이버가 "집주인" 표시를 붙이는 확인 방식 (verificationInfo.verificationType)
+//   OWNER: 집주인 확인 (과천 매물에서 확인)
+//   NDOC1: 집주인이 네이버 앱에서 직접 확인 (개포 디에이치퍼스티어아이파크 매물 원본에서 확인)
+// 다른 값(DOC 등)은 아직 집주인 표시와의 관계를 확인하지 못해 넣지 않았다.
+export const OWNER_VERIFICATION_TYPES = ['OWNER', 'NDOC1'];
+
+// 집주인 확인 매물 여부. verificationType을 먼저 보고, 그 밖에 owner가 들어간 키가 참이거나
+// 코드값에 OWNER / 집주인이 들어 있어도 집주인 매물로 본다.
 export function isOwnerArticle(x: any, depth = 0): boolean {
   if (!x || typeof x !== 'object' || depth > 4) return false;
+  if (OWNER_VERIFICATION_TYPES.includes(String(x.verificationInfo?.verificationType ?? '').toUpperCase())) return true;
   for (const [k, v] of Object.entries(x)) {
     if (k === 'duplicatedArticleInfo') continue; // 묶인 다른 중개사 매물은 따로 판단
     // owner가 들어간 키가 참이면 (true, "Y", 1 등 표기가 단지마다 다를 수 있음)
