@@ -1,22 +1,60 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { areaLabel, formatPrice, Listing } from './listing';
+import { areaLabel, formatPrice } from './listing';
 import { C } from './theme';
+import { HistoryEvent, House, HouseStatus } from './tracking';
 
 interface Props {
-  listing: Listing;
+  house: House;
+  status: HouseStatus;
+  fav: boolean;
   open: boolean;
-  wide: boolean; // 태블릿 2열일 때 칸을 채운다
+  selected?: boolean; // 태블릿에서 오른쪽에 보고 있는 매물
   onToggle: () => void;
+  onToggleFav: () => void;
+  onHide: () => void;
   onOpenArticle: (articleNumber: string, title: string) => void;
 }
 
-export function ListingCard({ listing: l, open, wide, onToggle, onOpenArticle }: Props) {
+const STATUS_LABEL = { new: '신규', changed: '가격변동', ended: '종료' } as const;
+
+function when(iso: string): string {
+  return new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function historyText(e: HistoryEvent): string {
+  const price = formatPrice({ deposit: e.deposit, rent: e.rent, kind: e.kind } as any);
+  const label = { first: '처음 발견', price: '가격 변경', ended: '목록에서 사라짐', relisted: '다시 올라옴' }[e.type];
+  return e.type === 'ended' ? label : `${label} · ${e.kind} ${price}`;
+}
+
+export function ListingCard({ house, status, fav, open, selected, onToggle, onToggleFav, onHide, onOpenArticle }: Props) {
+  const l = house.listing;
+  const ended = status === 'ended';
+  const prevPrice =
+    status === 'changed' && house.prevDeposit !== undefined
+      ? formatPrice({ ...l, deposit: house.prevDeposit, rent: house.prevRent ?? 0, kind: house.prevKind ?? l.kind })
+      : null;
   return (
-    <Pressable style={[styles.card, wide && styles.flex]} onPress={onToggle}>
-      <Text style={styles.complex} numberOfLines={1}>
-        {[l.complexName, l.dong && `${l.dong}동`].filter(Boolean).join(' · ')}
-      </Text>
+    <Pressable style={[styles.card, selected && styles.cardSelected, ended && styles.cardEnded]} onPress={onToggle}>
+      <View style={styles.topRow}>
+        {status ? (
+          <View style={[styles.statusBadge, styles[`status_${status}`]]}>
+            <Text style={[styles.statusText, styles[`statusText_${status}`]]}>{STATUS_LABEL[status]}</Text>
+          </View>
+        ) : null}
+        <Text style={[styles.complex, styles.flex]} numberOfLines={1}>
+          {[l.complexName, l.dong && `${l.dong}동`].filter(Boolean).join(' · ')}
+        </Text>
+        {ended ? (
+          <Pressable style={styles.iconButton} onPress={onHide} accessibilityLabel="목록에서 지우기">
+            <Text style={styles.hideText}>지우기</Text>
+          </Pressable>
+        ) : null}
+        <Pressable style={styles.iconButton} onPress={onToggleFav} accessibilityLabel={fav ? '즐겨찾기 해제' : '즐겨찾기'}>
+          <Text style={[styles.star, fav && styles.starOn]}>{fav ? '★' : '☆'}</Text>
+        </Pressable>
+      </View>
       <View style={styles.areaRow}>
         <View style={styles.areaBadge}>
           <Text style={styles.areaText}>전용 {areaLabel(l)}㎡</Text>
@@ -30,7 +68,10 @@ export function ListingCard({ listing: l, open, wide, onToggle, onOpenArticle }:
         <View style={styles.flex} />
         <Text style={[styles.kind, { color: l.kind === '월세' ? C.rent : C.accent }]}>{l.kind}</Text>
       </View>
-      <Text style={styles.price}>{formatPrice(l)}</Text>
+      <View style={styles.priceRow}>
+        <Text style={styles.price}>{formatPrice(l)}</Text>
+        {prevPrice ? <Text style={styles.prevPrice}>{prevPrice}</Text> : null}
+      </View>
       <Text style={styles.spec}>
         {[l.floor, l.direction, `공급 ${l.supplySpace}㎡`].filter(Boolean).join(' · ')}
       </Text>
@@ -54,6 +95,15 @@ export function ListingCard({ listing: l, open, wide, onToggle, onOpenArticle }:
               {b.confirmDate ? <Text style={styles.meta}>확인일 {b.confirmDate}</Text> : null}
             </View>
           ))}
+          <Text style={styles.brokerHeading}>조회 기록</Text>
+          <View style={styles.history}>
+            {[...house.history].reverse().map((e, i) => (
+              <View key={`${e.at}-${i}`} style={styles.historyRow}>
+                <Text style={styles.historyWhen}>{when(e.at)}</Text>
+                <Text style={styles.historyWhat}>{historyText(e)}</Text>
+              </View>
+            ))}
+          </View>
         </View>
       ) : (
         <>
@@ -83,8 +133,29 @@ function OwnerBadge() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   card: { padding: 14, borderRadius: 14, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface, gap: 4 },
+  cardSelected: { borderWidth: 2, borderColor: C.accent },
+  cardEnded: { opacity: 0.6 },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -6, marginRight: -8 },
   complex: { fontSize: 13, fontWeight: '600', color: C.muted },
-  areaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  statusBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
+  statusText: { fontSize: 11, fontWeight: '700' },
+  status_new: { backgroundColor: '#FCE9D6' },
+  statusText_new: { color: '#8A3E05' },
+  status_changed: { backgroundColor: '#DDE9F7' },
+  statusText_changed: { color: '#1D4E89' },
+  status_ended: { backgroundColor: '#ECEAE6' },
+  statusText_ended: { color: '#55524C' },
+  iconButton: { minWidth: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  star: { fontSize: 24, color: '#8C877E' },
+  starOn: { color: '#B7791F' },
+  hideText: { fontSize: 13, fontWeight: '600', color: C.error },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' },
+  prevPrice: { fontSize: 13, color: C.muted, textDecorationLine: 'line-through' },
+  history: { gap: 4, padding: 10, borderRadius: 10, backgroundColor: C.ground },
+  historyRow: { flexDirection: 'row', gap: 10 },
+  historyWhen: { fontSize: 12, color: C.muted, width: 92 },
+  historyWhat: { flex: 1, fontSize: 12, color: C.body },
+  areaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   areaBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: C.accentSoft },
   areaText: { fontSize: 17, fontWeight: '800', color: C.accentDark },
   typeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: C.ink },
@@ -92,7 +163,7 @@ const styles = StyleSheet.create({
   ownerBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: C.ownerBg },
   ownerText: { fontSize: 13, fontWeight: '700', color: C.ownerText },
   kind: { fontSize: 14, fontWeight: '700' },
-  price: { fontSize: 21, fontWeight: '700', color: C.ink, marginTop: 4 },
+  price: { fontSize: 21, fontWeight: '700', color: C.ink },
   spec: { fontSize: 13, color: C.body },
   feature: { fontSize: 13, lineHeight: 19, color: C.muted, marginTop: 2 },
   brokers: { fontSize: 12, color: C.muted, marginTop: 2 },

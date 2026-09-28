@@ -124,14 +124,14 @@ export function formatPrice(l: Listing): string {
 
 export type SortKey = 'rentAsc' | 'rentDesc' | 'depositAsc';
 
+export function compareListings(a: Listing, b: Listing, key: SortKey): number {
+  if (key === 'rentAsc') return a.rent - b.rent || a.deposit - b.deposit;
+  if (key === 'rentDesc') return b.rent - a.rent || a.deposit - b.deposit;
+  return a.deposit - b.deposit || a.rent - b.rent;
+}
+
 export function sortListings(list: Listing[], key: SortKey): Listing[] {
-  const out = [...list];
-  out.sort((a, b) => {
-    if (key === 'rentAsc') return a.rent - b.rent || a.deposit - b.deposit;
-    if (key === 'rentDesc') return b.rent - a.rent || a.deposit - b.deposit;
-    return a.deposit - b.deposit || a.rent - b.rent;
-  });
-  return out;
+  return [...list].sort((a, b) => compareListings(a, b, key));
 }
 
 // 전용 59~84㎡ 타입: 84.99㎡까지 포함

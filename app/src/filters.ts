@@ -27,6 +27,7 @@ export const DEPOSIT_OPTIONS: [number | null, string][] = [
   [5 * EOK, '5억 이하'],
   [7 * EOK, '7억 이하'],
   [10 * EOK, '10억 이하'],
+  [12 * EOK, '12억 이하'],
 ];
 
 export const RENT_OPTIONS: [number | null, string][] = [
