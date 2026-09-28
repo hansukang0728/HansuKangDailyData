@@ -57,6 +57,9 @@ interface Props {
 export function ArticleViewer({ url, title, topPad, onClose }: Props) {
   const logs = useRef<RequestLog[]>([]);
   const [count, setCount] = useState(0);
+  // 사람이 보는 화면이라 기본은 모바일 화면. 모바일 화면이 깨지면 PC 화면으로 바꿔 볼 수 있다
+  // (수집용 NaverBridge는 PC 화면이어야 하므로 이 설정과 무관)
+  const [desktop, setDesktop] = useState(false);
 
   const onMessage = (e: WebViewMessageEvent) => {
     try {
@@ -81,13 +84,19 @@ export function ArticleViewer({ url, title, topPad, onClose }: Props) {
         <Text style={styles.title} numberOfLines={1}>
           {title}
         </Text>
+        <Pressable style={styles.button} onPress={() => setDesktop(!desktop)}>
+          <Text style={styles.buttonText}>{desktop ? '모바일 화면' : 'PC 화면'}</Text>
+        </Pressable>
         <Pressable style={styles.button} onPress={shareLogs} disabled={count === 0}>
-          <Text style={styles.buttonText}>요청 기록 {count}</Text>
+          <Text style={styles.buttonText}>기록 {count}</Text>
         </Pressable>
       </View>
       <WebView
+        key={desktop ? 'desktop' : 'mobile'}
         source={{ uri: url }}
-        userAgent={DESKTOP_UA}
+        userAgent={desktop ? DESKTOP_UA : undefined}
+        setBuiltInZoomControls
+        setDisplayZoomControls={false}
         javaScriptEnabled
         domStorageEnabled
         thirdPartyCookiesEnabled
@@ -110,7 +119,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E4E0D8',
     backgroundColor: '#FFFFFF',
   },
-  title: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1C1B19' },
-  button: { height: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: '#D6D1C7', justifyContent: 'center' },
+  title: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1C1B19' },
+  button: { height: 36, paddingHorizontal: 10, borderRadius: 18, borderWidth: 1, borderColor: '#D6D1C7', justifyContent: 'center' },
   buttonText: { fontSize: 13, color: '#1C1B19' },
 });
