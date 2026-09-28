@@ -17,6 +17,7 @@ interface Props {
   onOpenPage: (url: string, title: string) => void;
   onOpenFloorPlan: () => void;
   ownerOnly?: boolean; // "집주인만" 필터가 켜져 있으면 집주인 확인 중개사 설명만 보여준다
+  onShareRaw?: () => void; // 이 매물의 네이버 원본 공유 (이번 실행에서 받은 매물만)
 }
 
 const STATUS_LABEL = { new: '신규', changed: '가격변동', ended: '종료' } as const;
@@ -31,7 +32,7 @@ function historyText(e: HistoryEvent): string {
   return e.type === 'ended' ? label : `${label} · ${e.kind} ${price}`;
 }
 
-export function ListingCard({ house, status, fav, open, selected, onToggle, onToggleFav, onHide, onOpenPage, onOpenFloorPlan, ownerOnly }: Props) {
+export function ListingCard({ house, status, fav, open, selected, onToggle, onToggleFav, onHide, onOpenPage, onOpenFloorPlan, ownerOnly, onShareRaw }: Props) {
   const l = house.listing;
   const [showAllBrokers, setShowAllBrokers] = useState(false);
   const ownerArticles = l.brokerArticles.filter((b) => b.owner);
@@ -148,6 +149,11 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
               <Text style={styles.moreBrokersText}>집주인 확인 중개사만 보기</Text>
             </Pressable>
           ) : null}
+          {onShareRaw ? (
+            <Pressable style={styles.moreBrokers} onPress={onShareRaw}>
+              <Text style={styles.rawLink}>이 매물 원본 공유 (표시 오류 확인용)</Text>
+            </Pressable>
+          ) : null}
           <Text style={styles.brokerHeading}>조회 기록</Text>
           <View style={styles.history}>
             {[...house.history].reverse().map((e, i) => (
@@ -234,6 +240,7 @@ const styles = StyleSheet.create({
   brokerName: { flex: 1, fontSize: 14, fontWeight: '600', color: C.ink },
   viewButton: { height: 32, paddingHorizontal: 10, borderRadius: 16, backgroundColor: C.accent, justifyContent: 'center' },
   viewButtonText: { fontSize: 12, color: '#FFFFFF', fontWeight: '600' },
+  rawLink: { fontSize: 12, color: C.muted, textDecorationLine: 'underline' },
   moreBrokers: { height: 40, justifyContent: 'center' },
   moreBrokersText: { fontSize: 13, fontWeight: '600', color: C.accent },
   complexButton: { height: 44, borderRadius: 12, borderWidth: 1, borderColor: C.accent, backgroundColor: C.accentSoft, alignItems: 'center', justifyContent: 'center' },

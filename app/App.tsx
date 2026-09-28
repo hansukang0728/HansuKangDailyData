@@ -128,7 +128,9 @@ export default function App() {
       setFetchedAt(saved ? new Date(saved.fetchedAt) : undefined);
       setComplexNames(saved?.complexNames ?? {});
       setComplexFetchedAt(saved?.complexFetchedAt ?? {});
-      setFilters({ ...DEFAULT_FILTERS, ...savedFilters });
+      // 예전 세부 타입 필터(84A 등)는 대표 평형 필터로 바뀌어 맞지 않으므로 버린다
+      const types = (savedFilters?.types ?? []).filter((t) => /^\d+$/.test(t));
+      setFilters({ ...DEFAULT_FILTERS, ...savedFilters, types });
       setFavorites(savedFavs ?? []);
       setLoaded(true);
     })();
@@ -186,6 +188,27 @@ export default function App() {
   };
   const rawItems = useMemo(() => Object.values(rawByComplex).flat(), [rawByComplex]);
   // 목록에서 뺀 단지의 기록은 보이지 않게
+  // 매물번호 → 이번 실행에서 받은 원본 항목 (매물 하나의 원본 공유용)
+  const rawByArticle = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const item of rawItems) {
+      const rep = item?.representativeArticleInfo ?? item;
+      if (rep?.articleNumber) m.set(String(rep.articleNumber), item);
+      for (const a of item?.duplicatedArticleInfo?.articleInfoList ?? []) {
+        if (a?.articleNumber) m.set(String(a.articleNumber), item);
+      }
+    }
+    return m;
+  }, [rawItems]);
+
+  const shareRawOf = (l: Listing) => {
+    const item = rawByArticle.get(l.articleNumber);
+    if (!item) return;
+    Share.share({
+      message: `${l.complexName} ${l.dong}동 ${l.floor} 매물 원본 (집주인 표시 ${l.owner ? '있음' : '없음'})\n\n${JSON.stringify(item, null, 1).slice(0, 60000)}`,
+    });
+  };
+
   const shown = useMemo(
     () => houses.filter((h) => !h.hidden && complexes.includes(h.listing.complexNumber)),
     [houses, complexes],
@@ -319,6 +342,7 @@ export default function App() {
       onOpenPage={(url, title) => setViewer({ url, title })}
       onOpenFloorPlan={() => setFloorPlanFor(h.listing)}
       ownerOnly={filters.ownerOnly}
+      onShareRaw={rawByArticle.has(h.listing.articleNumber) ? () => shareRawOf(h.listing) : undefined}
     />
   );
 

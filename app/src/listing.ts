@@ -65,7 +65,8 @@ export function isOwnerArticle(x: any, depth = 0): boolean {
   if (!x || typeof x !== 'object' || depth > 4) return false;
   for (const [k, v] of Object.entries(x)) {
     if (k === 'duplicatedArticleInfo') continue; // 묶인 다른 중개사 매물은 따로 판단
-    if (/owner/i.test(k) && v === true) return true;
+    // owner가 들어간 키가 참이면 (true, "Y", 1 등 표기가 단지마다 다를 수 있음)
+    if (/owner/i.test(k) && (v === true || v === 1 || v === 'Y' || v === 'y' || v === 'true')) return true;
     // 설명 문구("집주인 거주중" 등)에 속지 않도록 설명 필드와 긴 문장은 건너뛴다
     if (typeof v === 'string' && v.length <= 12 && !/desc|feature|comment/i.test(k) && (/^OWNER/i.test(v) || v.includes('집주인'))) return true;
     if (typeof v === 'object' && isOwnerArticle(v, depth + 1)) return true;
@@ -194,11 +195,11 @@ export function areaLabel(l: Listing): string {
   return String(Math.floor(l.exclusiveSpace));
 }
 
-// 타입 필터용 키와 표시: "84L" / "84㎡ L"
+// 평형 필터는 대표 평형(전용면적 정수)으로 묶는다: 84A·84B·84T → "84", 표시는 "84㎡"
 export function typeKey(l: Listing): string {
-  return `${areaLabel(l)}${l.typeName}`;
+  return areaLabel(l);
 }
 
 export function typeLabel(l: Listing): string {
-  return l.typeName ? `${areaLabel(l)}㎡ ${l.typeName}` : `${areaLabel(l)}㎡`;
+  return `${areaLabel(l)}㎡`;
 }

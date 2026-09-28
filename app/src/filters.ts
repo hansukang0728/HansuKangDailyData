@@ -3,7 +3,7 @@ import { inTargetArea, Listing, typeKey } from './listing';
 export interface Filters {
   complexes: string[]; // 비어 있으면 전체
   targetArea: boolean; // 전용 59–84㎡만
-  types: string[]; // typeKey 목록, 비어 있으면 전체
+  types: string[]; // 대표 평형(전용면적 정수, 예: "84") 목록, 비어 있으면 전체
   depositMax: number | null; // 원
   rentMax: number | null; // 원 (월세에만 적용)
   ownerOnly: boolean;

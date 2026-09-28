@@ -27,7 +27,7 @@ export function FilterPanel({ filters: f, onChange, complexes, types, ownerCount
           />
         ))}
       </Section>
-      <Section title="면적 · 타입">
+      <Section title="평형 (전용)">
         <Chip label="전용 59–84㎡" on={f.targetArea} onPress={() => set({ targetArea: !f.targetArea, types: [] })} />
         {types.map((t) => (
           <Chip
