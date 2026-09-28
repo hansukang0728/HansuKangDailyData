@@ -184,7 +184,7 @@ export function articleUrl(articleNumber: string): string {
   return `https://fin.land.naver.com/articles/${articleNumber}`;
 }
 
-// 네이버 부동산 단지 정보 페이지 주소 (평면도 포함)
+// 네이버 부동산 단지 정보 페이지 주소
 export function complexUrl(complexNumber: string): string {
   return `https://fin.land.naver.com/complexes/${complexNumber}`;
 }

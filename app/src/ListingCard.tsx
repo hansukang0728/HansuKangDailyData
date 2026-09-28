@@ -81,13 +81,15 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
               <Text style={styles.typeText}>{l.typeName}타입</Text>
             </View>
           ) : null}
-          <Text style={styles.planLink}>평면도 ›</Text>
         </Pressable>
         {l.owner ? <OwnerBadge /> : null}
         <View style={styles.flex} />
-        <Text style={[styles.kind, { color: l.kind === '월세' ? C.rent : C.accent }]}>{l.kind}</Text>
+        <Pressable style={styles.planButton} onPress={onOpenFloorPlan} accessibilityLabel="이 타입 평면도 보기">
+          <Text style={styles.planButtonText}>평면도</Text>
+        </Pressable>
       </View>
       <View style={styles.priceRow}>
+        <Text style={[styles.kind, { color: l.kind === '월세' ? C.rent : C.accent }]}>{l.kind}</Text>
         <Text style={styles.price}>{formatPrice(l)}</Text>
         {prevPrice ? <Text style={styles.prevPrice}>{prevPrice}</Text> : null}
       </View>
@@ -106,7 +108,7 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
             style={styles.complexButton}
             onPress={() => onOpenPage(complexUrl(l.complexNumber), `${l.complexName || '단지'} 정보`)}
           >
-            <Text style={styles.complexButtonText}>단지 정보 · 평면도 보기</Text>
+            <Text style={styles.complexButtonText}>단지 정보 네이버로 보기</Text>
           </Pressable>
           <Text style={styles.brokerHeading}>
             {limitToOwner
@@ -210,7 +212,8 @@ const styles = StyleSheet.create({
   historyWhen: { fontSize: 12, color: C.muted, width: 92 },
   historyWhat: { flex: 1, fontSize: 12, color: C.body },
   areaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  planLink: { fontSize: 13, fontWeight: '700', color: C.accent, paddingVertical: 8 },
+  planButton: { height: 32, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: C.accent, justifyContent: 'center' },
+  planButtonText: { fontSize: 13, fontWeight: '700', color: C.accent },
   areaBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: C.accentSoft },
   areaText: { fontSize: 17, fontWeight: '800', color: C.accentDark },
   typeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: C.ink },
