@@ -230,6 +230,7 @@ export default function App() {
       onToggleFav={() => toggleFav(h.id)}
       onHide={() => hideWhere((x) => x.id === h.id)}
       onOpenPage={(url, title) => setViewer({ url, title })}
+      ownerOnly={filters.ownerOnly}
     />
   );
 
