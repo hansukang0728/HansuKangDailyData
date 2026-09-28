@@ -144,6 +144,11 @@ export function articleUrl(articleNumber: string): string {
   return `https://fin.land.naver.com/articles/${articleNumber}`;
 }
 
+// 네이버 부동산 단지 정보 페이지 주소 (평면도 포함)
+export function complexUrl(complexNumber: string): string {
+  return `https://fin.land.naver.com/complexes/${complexNumber}`;
+}
+
 // 전용면적 표시: 84.28 -> "84"
 export function areaLabel(l: Listing): string {
   return String(Math.floor(l.exclusiveSpace));

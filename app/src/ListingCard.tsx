@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { areaLabel, formatPrice } from './listing';
+import { areaLabel, articleUrl, complexUrl, formatPrice } from './listing';
 import { C } from './theme';
 import { HistoryEvent, House, HouseStatus } from './tracking';
 
@@ -13,7 +13,7 @@ interface Props {
   onToggle: () => void;
   onToggleFav: () => void;
   onHide: () => void;
-  onOpenArticle: (articleNumber: string, title: string) => void;
+  onOpenPage: (url: string, title: string) => void;
 }
 
 const STATUS_LABEL = { new: '신규', changed: '가격변동', ended: '종료' } as const;
@@ -28,7 +28,7 @@ function historyText(e: HistoryEvent): string {
   return e.type === 'ended' ? label : `${label} · ${e.kind} ${price}`;
 }
 
-export function ListingCard({ house, status, fav, open, selected, onToggle, onToggleFav, onHide, onOpenArticle }: Props) {
+export function ListingCard({ house, status, fav, open, selected, onToggle, onToggleFav, onHide, onOpenPage }: Props) {
   const l = house.listing;
   const ended = status === 'ended';
   const prevPrice =
@@ -77,6 +77,12 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
       </Text>
       {open ? (
         <View style={styles.brokerList}>
+          <Pressable
+            style={styles.complexButton}
+            onPress={() => onOpenPage(complexUrl(l.complexNumber), `${l.complexName || '단지'} 정보`)}
+          >
+            <Text style={styles.complexButtonText}>단지 정보 · 평면도 보기</Text>
+          </Pressable>
           <Text style={styles.brokerHeading}>중개사 {l.brokerArticles.length}곳 · 중개사별 설명</Text>
           {l.brokerArticles.map((b) => (
             <View key={b.articleNumber || b.broker} style={styles.brokerItem}>
@@ -86,7 +92,7 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
                 </Text>
                 {b.owner ? <OwnerBadge /> : null}
                 {b.articleNumber ? (
-                  <Pressable style={styles.viewButton} onPress={() => onOpenArticle(b.articleNumber, b.broker || '매물')}>
+                  <Pressable style={styles.viewButton} onPress={() => onOpenPage(articleUrl(b.articleNumber), b.broker || '매물')}>
                     <Text style={styles.viewButtonText}>전체 설명 보기</Text>
                   </Pressable>
                 ) : null}
@@ -176,4 +182,6 @@ const styles = StyleSheet.create({
   brokerName: { flex: 1, fontSize: 14, fontWeight: '600', color: C.ink },
   viewButton: { height: 32, paddingHorizontal: 10, borderRadius: 16, backgroundColor: C.accent, justifyContent: 'center' },
   viewButtonText: { fontSize: 12, color: '#FFFFFF', fontWeight: '600' },
+  complexButton: { height: 44, borderRadius: 12, borderWidth: 1, borderColor: C.accent, backgroundColor: C.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  complexButtonText: { fontSize: 14, fontWeight: '700', color: C.accentDark },
 });

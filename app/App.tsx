@@ -74,7 +74,7 @@ export default function App() {
   const [showNaver, setShowNaver] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selectedId, setSelectedId] = useState<string>();
-  const [viewer, setViewer] = useState<{ articleNumber: string; title: string }>();
+  const [viewer, setViewer] = useState<{ url: string; title: string }>();
 
   // 저장해 둔 조회 기록·필터·즐겨찾기를 불러온다
   useEffect(() => {
@@ -229,7 +229,7 @@ export default function App() {
       onToggle={() => (split ? setSelectedId(h.id) : setExpanded({ ...expanded, [h.id]: !expanded[h.id] }))}
       onToggleFav={() => toggleFav(h.id)}
       onHide={() => hideWhere((x) => x.id === h.id)}
-      onOpenArticle={(articleNumber, title) => setViewer({ articleNumber, title })}
+      onOpenPage={(url, title) => setViewer({ url, title })}
     />
   );
 
@@ -392,7 +392,7 @@ export default function App() {
 
       {viewer ? (
         <ArticleViewer
-          articleNumber={viewer.articleNumber}
+          url={viewer.url}
           title={viewer.title}
           topPad={topPad}
           onClose={() => setViewer(undefined)}

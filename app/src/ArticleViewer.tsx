@@ -1,4 +1,5 @@
-// 앱 안에서 네이버 매물 페이지를 여는 화면. 중개사가 쓴 전체 설명을 그대로 볼 수 있다.
+// 앱 안에서 네이버 페이지(매물 페이지, 단지 정보 페이지)를 여는 화면.
+// 매물 페이지에서는 중개사가 쓴 전체 설명을, 단지 페이지에서는 단지 정보와 평면도를 본다.
 // 페이지가 부르는 네이버 API 요청도 기록해 두는데, 상세 설명 API를 찾아 앱이 직접
 // 가져오게 만들기 위한 조사용이다 ("요청 기록 공유"로 보내면 그걸로 연결한다).
 import { useRef, useState } from 'react';
@@ -6,7 +7,6 @@ import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 
 import { DESKTOP_UA } from './NaverBridge';
-import { articleUrl } from './listing';
 
 const LOGGER_JS = `
 (function () {
@@ -48,13 +48,13 @@ interface RequestLog {
 }
 
 interface Props {
-  articleNumber: string;
+  url: string;
   title: string;
   topPad: number;
   onClose: () => void;
 }
 
-export function ArticleViewer({ articleNumber, title, topPad, onClose }: Props) {
+export function ArticleViewer({ url, title, topPad, onClose }: Props) {
   const logs = useRef<RequestLog[]>([]);
   const [count, setCount] = useState(0);
 
@@ -69,7 +69,7 @@ export function ArticleViewer({ articleNumber, title, topPad, onClose }: Props) 
 
   const shareLogs = () => {
     const text = JSON.stringify(logs.current, null, 1);
-    Share.share({ message: `매물 ${articleNumber} 페이지 요청 기록 ${logs.current.length}건\n\n${text.slice(0, 60000)}` });
+    Share.share({ message: `${url} 요청 기록 ${logs.current.length}건\n\n${text.slice(0, 60000)}` });
   };
 
   return (
@@ -86,7 +86,7 @@ export function ArticleViewer({ articleNumber, title, topPad, onClose }: Props) 
         </Pressable>
       </View>
       <WebView
-        source={{ uri: articleUrl(articleNumber) }}
+        source={{ uri: url }}
         userAgent={DESKTOP_UA}
         javaScriptEnabled
         domStorageEnabled
