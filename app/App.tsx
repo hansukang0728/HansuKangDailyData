@@ -14,7 +14,7 @@ import {
 
 import { ArticleViewer } from './src/ArticleViewer';
 import { NaverBridge, NaverBridgeHandle } from './src/NaverBridge';
-import { areaLabel, formatPrice, inTargetArea, Listing, SortKey, sortListings, toListing } from './src/listing';
+import { areaLabel, formatPrice, inTargetArea, isOwnerArticle, Listing, SortKey, sortListings, toListing } from './src/listing';
 
 // 샘플 단계: 단지 하나로 수집이 되는지부터 확인한다
 const COMPLEX_NUMBER = '127071';
@@ -55,6 +55,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('전체');
   const [sort, setSort] = useState<SortKey>('rentAsc');
   const [areaFilter, setAreaFilter] = useState(true);
+  const [ownerOnly, setOwnerOnly] = useState(false);
   const [screen, setScreen] = useState<'list' | 'raw'>('list');
   const [showNaver, setShowNaver] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -74,10 +75,10 @@ export default function App() {
 
   const visible = useMemo(() => {
     const filtered = listings.filter(
-      (l) => (tab === '전체' || l.kind === tab) && (!areaFilter || inTargetArea(l)),
+      (l) => (tab === '전체' || l.kind === tab) && (!areaFilter || inTargetArea(l)) && (!ownerOnly || l.owner),
     );
     return sortListings(filtered, sort);
-  }, [listings, tab, sort, areaFilter]);
+  }, [listings, tab, sort, areaFilter, ownerOnly]);
 
   const complexName = listings[0]?.complexName || `단지 ${COMPLEX_NUMBER}`;
 
@@ -98,10 +99,13 @@ export default function App() {
   };
 
   const shareRaw = () => {
-    const withDup = rawItems.filter((i) => i?.duplicatedArticleInfo).slice(0, 2);
-    const sample = JSON.stringify([...withDup, ...rawItems.slice(0, 3 - withDup.length)], null, 1);
+    // 집주인 매물 1건, 중개사 여러 곳 매물 1건, 일반 매물을 섞어서 필드 비교가 되게 한다
+    const owner = rawItems.filter((i) => isOwnerArticle(i?.representativeArticleInfo ?? i)).slice(0, 1);
+    const withDup = rawItems.filter((i) => i?.duplicatedArticleInfo && !owner.includes(i)).slice(0, 1);
+    const rest = rawItems.filter((i) => !owner.includes(i) && !withDup.includes(i)).slice(0, 3 - owner.length - withDup.length);
+    const sample = JSON.stringify([...owner, ...withDup, ...rest], null, 1);
     Share.share({
-      message: `단지 ${COMPLEX_NUMBER} 원본 ${rawItems.length}건 중 3건 (중개사 여러 곳 매물 우선)\n\n${sample.slice(0, 60000)}`,
+      message: `단지 ${COMPLEX_NUMBER} 원본 ${rawItems.length}건 중 3건 (집주인 매물, 중개사 여러 곳 매물 포함)\n\n${sample.slice(0, 60000)}`,
     });
   };
 
@@ -153,7 +157,7 @@ export default function App() {
           </View>
           <Text style={styles.rawMeta}>
             페이지 상태: {pageStatus}
-            {pageDetail ? ` (${pageDetail})` : ''} · 받은 항목 {rawItems.length}건 · 해석된 매물 {listings.length}건
+            {pageDetail ? ` (${pageDetail})` : ''} · 받은 항목 {rawItems.length}건 · 해석된 매물 {listings.length}건 · 집주인 판정 {listings.filter((l) => l.owner).length}건
           </Text>
           <ScrollView style={styles.rawBox} contentContainerStyle={{ padding: 12 }}>
             <Text selectable style={styles.rawText}>
@@ -200,6 +204,9 @@ export default function App() {
             <Pressable style={areaFilter ? styles.chipOn : styles.chip} onPress={() => setAreaFilter(!areaFilter)}>
               <Text style={areaFilter ? styles.chipOnText : styles.chipText}>전용 59–84㎡</Text>
             </Pressable>
+            <Pressable style={ownerOnly ? styles.chipOn : styles.chip} onPress={() => setOwnerOnly(!ownerOnly)}>
+              <Text style={ownerOnly ? styles.chipOnText : styles.chipText}>집주인만 {listings.filter((l) => l.owner).length}</Text>
+            </Pressable>
             {SORTS.map(([key, label]) => (
               <Pressable key={key} style={sort === key ? styles.sortOn : styles.chip} onPress={() => setSort(key)}>
                 <Text style={sort === key ? styles.sortOnText : styles.chipText}>{label}</Text>
@@ -237,6 +244,11 @@ export default function App() {
                         <Text style={styles.typeText}>{l.typeName}타입</Text>
                       </View>
                     ) : null}
+                    {l.owner ? (
+                      <View style={styles.ownerBadge}>
+                        <Text style={styles.ownerText}>집주인</Text>
+                      </View>
+                    ) : null}
                     <View style={styles.flex} />
                     <Text style={[styles.kind, { color: l.kind === '월세' ? C.rent : C.accent }]}>{l.kind}</Text>
                   </View>
@@ -253,6 +265,11 @@ export default function App() {
                             <Text style={styles.brokerName} numberOfLines={1}>
                               {b.broker || '중개사'}
                             </Text>
+                            {b.owner ? (
+                              <View style={styles.ownerBadge}>
+                                <Text style={styles.ownerText}>집주인</Text>
+                              </View>
+                            ) : null}
                             {b.articleNumber ? (
                               <Pressable
                                 style={styles.viewButton}
@@ -342,6 +359,8 @@ const styles = StyleSheet.create({
   areaText: { fontSize: 17, fontWeight: '800', color: '#0A4A46' },
   typeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: C.ink },
   typeText: { fontSize: 17, fontWeight: '800', color: '#FFFFFF' },
+  ownerBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: '#EEE8F8' },
+  ownerText: { fontSize: 13, fontWeight: '700', color: '#4B2D86' },
   kind: { fontSize: 14, fontWeight: '700' },
   price: { fontSize: 21, fontWeight: '700', color: C.ink, marginTop: 4 },
   hint: { fontSize: 11, color: C.accent, marginTop: 2 },

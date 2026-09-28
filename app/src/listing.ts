@@ -10,6 +10,7 @@ export interface BrokerArticle {
   broker: string;
   feature: string; // 이 중개사가 쓴 한 줄 설명 (목록 응답에 있을 때만)
   confirmDate: string;
+  owner: boolean; // 집주인 확인(인증) 매물
 }
 
 export interface Listing {
@@ -28,6 +29,7 @@ export interface Listing {
   brokers: string[];
   brokerArticles: BrokerArticle[];
   confirmDate: string;
+  owner: boolean; // 중개사 중 한 곳이라도 집주인 확인 매물이면 true
 }
 
 const DIRECTIONS: Record<string, string> = {
@@ -42,6 +44,21 @@ function firstNumber(obj: any, keys: string[]): number {
     if (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v))) return Number(v);
   }
   return 0;
+}
+
+// 집주인 확인 매물 여부. 네이버가 어떤 필드로 주는지 아직 확인하지 못해서
+// owner가 들어간 키가 true이거나, 값에 OWNER / 집주인이 들어 있으면 집주인 매물로 본다.
+// 원본 데이터로 실제 필드를 확인하면 그 필드만 보도록 좁힐 것.
+export function isOwnerArticle(x: any, depth = 0): boolean {
+  if (!x || typeof x !== 'object' || depth > 4) return false;
+  for (const [k, v] of Object.entries(x)) {
+    if (k === 'duplicatedArticleInfo') continue; // 묶인 다른 중개사 매물은 따로 판단
+    if (/owner/i.test(k) && v === true) return true;
+    // 설명 문구("집주인 거주중" 등)에 속지 않도록 설명 필드와 긴 문장은 건너뛴다
+    if (typeof v === 'string' && v.length <= 12 && !/desc|feature|comment/i.test(k) && (/^OWNER/i.test(v) || v.includes('집주인'))) return true;
+    if (typeof v === 'object' && isOwnerArticle(v, depth + 1)) return true;
+  }
+  return false;
 }
 
 export function toListing(item: any): Listing {
@@ -63,6 +80,7 @@ export function toListing(item: any): Listing {
     broker: x?.brokerInfo?.brokerageName ?? '',
     feature: x?.articleDetail?.articleFeatureDescription ?? x?.articleFeatureDescription ?? '',
     confirmDate: x?.verificationInfo?.articleConfirmDate ?? '',
+    owner: isOwnerArticle(x),
   }));
   const brokers = brokerArticles.map((b) => b.broker).filter(Boolean);
 
@@ -85,6 +103,7 @@ export function toListing(item: any): Listing {
     brokers,
     brokerArticles,
     confirmDate: a.verificationInfo?.articleConfirmDate ?? '',
+    owner: isOwnerArticle(a) || brokerArticles.some((b) => b.owner),
   };
 }
 
