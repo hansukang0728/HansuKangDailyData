@@ -37,6 +37,9 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
   const limitToOwner = !!ownerOnly && !showAllBrokers && ownerArticles.length > 0;
   const brokerArticles = limitToOwner ? ownerArticles : l.brokerArticles;
   const hiddenBrokers = l.brokerArticles.length - brokerArticles.length;
+  // 기준가를 낸 중개사 (집주인 기준이면 집주인 확인 중개사 중에서)
+  const isBase = (b: (typeof l.brokerArticles)[number]) =>
+    b.deposit === l.deposit && b.rent === l.rent && (b.kind ?? l.kind) === l.kind && (l.priceBasis !== 'owner' || b.owner);
   // 접힌 카드에 보여줄 한 줄 설명과 중개사 이름도 같은 기준으로
   const summaryFeature = limitToOwner ? (ownerArticles.find((b) => b.feature)?.feature ?? l.feature) : l.feature;
   const summaryBrokers = limitToOwner
@@ -86,7 +89,8 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
       </View>
       {l.priceVaries && l.priceMax ? (
         <Text style={styles.priceVaries}>
-          중개사별 가격 다름 · 최저 {formatPrice(l)} ~ 최고 {formatPrice({ ...l, ...l.priceMax })}
+          {l.priceBasis === 'owner' ? '집주인 확인 최저가 기준' : '최저가 기준'} · 중개사별{' '}
+          {formatPrice({ ...l, ...(l.priceMin ?? l) })} ~ {formatPrice({ ...l, ...l.priceMax })}
         </Text>
       ) : null}
       <Text style={styles.spec}>
@@ -119,9 +123,9 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
                 ) : null}
               </View>
               {l.priceVaries && b.deposit !== undefined ? (
-                <Text style={[styles.brokerPrice, b.deposit === l.deposit && b.rent === l.rent && styles.brokerPriceLow]}>
+                <Text style={[styles.brokerPrice, isBase(b) && styles.brokerPriceLow]}>
                   {b.kind ?? l.kind} {formatPrice({ ...l, kind: b.kind ?? l.kind, deposit: b.deposit, rent: b.rent ?? 0 })}
-                  {b.deposit === l.deposit && b.rent === l.rent ? ' · 최저' : ''}
+                  {isBase(b) ? ' · 기준가' : ''}
                 </Text>
               ) : null}
               <Text style={styles.feature}>{b.feature || '목록에 설명이 없어요. 전체 설명 보기를 눌러주세요.'}</Text>

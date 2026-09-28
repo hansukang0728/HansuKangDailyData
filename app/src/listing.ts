@@ -35,8 +35,12 @@ export interface Listing {
   brokerArticles: BrokerArticle[];
   confirmDate: string;
   owner: boolean; // 중개사 중 한 곳이라도 집주인 확인 매물이면 true
-  // 중개사마다 올린 가격이 다를 때: deposit/rent는 가장 싼 가격, priceMax는 가장 비싼 가격
+  // deposit/rent(기준가): 집주인 확인 중개사 가격 중 가장 싼 가격, 없으면 전체 중 가장 싼 가격.
+  // 정렬·필터·가격변동 비교는 모두 이 기준가로 한다.
+  priceBasis?: 'owner' | 'all';
+  // 중개사마다 올린 가격이 다를 때 전체 범위
   priceVaries?: boolean;
+  priceMin?: { deposit: number; rent: number };
   priceMax?: { deposit: number; rent: number };
 }
 
@@ -105,14 +109,16 @@ export function toListing(item: any, complexNumber: string): Listing {
   });
   const brokers = brokerArticles.map((b) => b.broker).filter(Boolean);
 
-  // 대표 매물과 같은 거래유형 중에서 가장 싼/비싼 가격. 네이버가 대표 중개사를 바꿔도
-  // 가격변동으로 잘못 잡히지 않도록 목록 가격은 가장 싼 가격으로 통일한다
-  const offers = brokerArticles
-    .filter((b) => b.kind === rep.kind && (b.deposit || b.rent))
-    .map((b) => ({ deposit: b.deposit ?? 0, rent: b.rent ?? 0 }))
-    .sort(cheaper);
+  // 대표 매물과 같은 거래유형의 가격들. 네이버가 대표 중개사를 바꿔도 가격변동으로 잘못
+  // 잡히지 않도록 기준가는 대표 매물이 아니라 아래 규칙으로 정한다 (사용자 결정):
+  // 집주인 확인 중개사 가격 중 가장 싼 가격, 집주인 확인이 없으면 전체 중 가장 싼 가격
+  const sameKind = brokerArticles.filter((b) => b.kind === rep.kind && (b.deposit || b.rent));
+  const toOffer = (b: BrokerArticle) => ({ deposit: b.deposit ?? 0, rent: b.rent ?? 0 });
+  const offers = sameKind.map(toOffer).sort(cheaper);
+  const ownerOffers = sameKind.filter((b) => b.owner).map(toOffer).sort(cheaper);
   const low = offers[0] ?? rep;
   const high = offers[offers.length - 1] ?? rep;
+  const base = ownerOffers[0] ?? low;
   const priceVaries = offers.some((o) => cheaper(o, low) !== 0);
 
   const target = floorDetail.targetFloor;
@@ -129,14 +135,16 @@ export function toListing(item: any, complexNumber: string): Listing {
     typeName: space.nameType ?? '',
     direction: DIRECTIONS[detail.direction] ?? detail.direction ?? '',
     kind: rep.kind,
-    deposit: low.deposit,
-    rent: low.rent,
+    deposit: base.deposit,
+    rent: base.rent,
     feature: detail.articleFeatureDescription ?? '',
     brokers,
     brokerArticles,
     confirmDate: a.verificationInfo?.articleConfirmDate ?? '',
     owner: isOwnerArticle(a) || brokerArticles.some((b) => b.owner),
+    priceBasis: ownerOffers.length ? 'owner' : 'all',
     priceVaries,
+    priceMin: priceVaries ? { deposit: low.deposit, rent: low.rent } : undefined,
     priceMax: priceVaries ? { deposit: high.deposit, rent: high.rent } : undefined,
   };
 }
