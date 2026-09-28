@@ -19,7 +19,7 @@ import { DEFAULT_PROFILES, DELAY_BETWEEN_COMPLEXES_MS, Profile } from './src/com
 import { FilterPanel } from './src/FilterPanel';
 import { FloorPlanSheet } from './src/FloorPlanSheet';
 import { activeCount, DEFAULT_FILTERS, Filters, matches } from './src/filters';
-import { compareListings, isOwnerArticle, Listing, SortKey, toListing, typeKey, typeLabel } from './src/listing';
+import { compareListings, isOwnerArticle, Listing, OWNER_VERIFICATION_TYPES, SortKey, toListing, typeKey, typeLabel } from './src/listing';
 import { ListingCard } from './src/ListingCard';
 import { NaverBridge, NaverBridgeHandle } from './src/NaverBridge';
 import { ProfileManager } from './src/ProfileManager';
@@ -200,6 +200,37 @@ export default function App() {
     }
     return m;
   }, [rawItems]);
+
+  // 원본 화면용: 단지별 확인 방식(verificationType) 분포와 집주인 판정 수.
+  // 네이버 앱의 "집주인" 매물 수와 비교해 빠진 확인 방식이 있는지 보는 용도
+  const verificationStats = useMemo(
+    () =>
+      Object.entries(rawByComplex).map(([cn, items]) => {
+        const byType: Record<string, number> = {};
+        let articles = 0;
+        let ownerHouses = 0;
+        for (const item of items) {
+          const rep = item?.representativeArticleInfo ?? item;
+          const list: any[] = item?.duplicatedArticleInfo?.articleInfoList?.length ? item.duplicatedArticleInfo.articleInfoList : [rep];
+          for (const a of list) {
+            const t = String(a?.verificationInfo?.verificationType ?? '없음');
+            byType[t] = (byType[t] ?? 0) + 1;
+            articles++;
+          }
+          try {
+            if (toListing(item, cn).owner) ownerHouses++;
+          } catch {
+            // 형태가 다른 항목은 건너뜀
+          }
+        }
+        const types = Object.entries(byType)
+          .sort((a, b) => b[1] - a[1])
+          .map(([t, n]) => `${t} ${n}`)
+          .join(' · ');
+        return { cn, houses: items.length, articles, ownerHouses, types };
+      }),
+    [rawByComplex],
+  );
 
   const shareRawOf = (l: Listing) => {
     const item = rawByArticle.get(l.articleNumber);
@@ -431,6 +462,21 @@ export default function App() {
             {pageDetail ? ` (${pageDetail})` : ''} · 이번 실행에서 받은 항목 {rawItems.length}건 · 저장된 집 {houses.length}곳 · 집주인 판정{' '}
             {shown.filter((h) => h.listing.owner).length}건
           </Text>
+          {verificationStats.length ? (
+            <View style={styles.statsBox}>
+              <Text style={styles.statsTitle}>확인 방식별 매물 수 (집주인 판정: {OWNER_VERIFICATION_TYPES.join(', ')})</Text>
+              {verificationStats.map((st) => (
+                <View key={st.cn} style={styles.statsRow}>
+                  <Text style={styles.statsName}>
+                    {nameOf(st.cn)} · 집 {st.houses}곳 중 집주인 {st.ownerHouses}곳
+                  </Text>
+                  <Text style={styles.statsTypes}>
+                    중개사 매물 {st.articles}건: {st.types}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
           <ScrollView style={styles.rawBox} contentContainerStyle={{ padding: 12 }}>
             <Text selectable style={styles.rawText}>
               {rawItems.length
@@ -660,6 +706,11 @@ const styles = StyleSheet.create({
   rawTitle: { fontSize: 18, fontWeight: '700', color: C.ink },
   rawActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingBottom: 8 },
   rawMeta: { fontSize: 12, color: C.muted, paddingHorizontal: 16, paddingBottom: 8 },
+  statsBox: { marginHorizontal: 16, marginBottom: 8, padding: 12, gap: 8, borderRadius: 12, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line },
+  statsTitle: { fontSize: 12, fontWeight: '700', color: C.ink },
+  statsRow: { gap: 2 },
+  statsName: { fontSize: 13, fontWeight: '600', color: C.ink },
+  statsTypes: { fontSize: 12, color: C.body },
   rawBox: {
     flex: 1,
     marginHorizontal: 16,
