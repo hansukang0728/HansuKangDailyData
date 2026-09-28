@@ -1,0 +1,68 @@
+# app/ 의 Expo 앱을 안드로이드 APK로 빌드해서 Actions 아티팩트로 올린다.
+# 폰에서 받을 때: GitHub 저장소 > Releases > 가장 최근 "앱 빌드 #N" > app-release.apk
+# (Actions 실행 화면 하단 Artifacts에도 zip으로 올라간다)
+name: Android APK
+
+on:
+  push:
+    paths:
+      - 'app/**'
+      - '.github/workflows/android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          CI: 1
+
+      # 릴리스 빌드지만 템플릿의 debug 키로 서명된다 (개인 설치용이라 충분)
+      - name: Build APK
+        working-directory: app/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gwacheon-rent-apk
+          path: app/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      - name: Publish to Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: app-build-${{ github.run_number }}
+          name: 앱 빌드 #${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          body: ${{ github.ref_name }} @ ${{ github.sha }}
+          files: app/android/app/build/outputs/apk/release/app-release.apk

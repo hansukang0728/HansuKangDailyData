@@ -34,3 +34,15 @@ python3 molit_trade.py --months 3
 
 네이버 호가는 `.claude/skills/crawl-naver-land/SKILL.md`, 국토부 실거래가는
 `.claude/skills/molit-apt-trade/SKILL.md` 참고.
+
+## 과천 전월세 앱 (`app/`)
+
+안드로이드 폰·태블릿용 Expo(React Native) 앱. 새로고침을 누르면 앱 안의 보이지 않는
+WebView가 네이버 지도 페이지를 열고, 그 페이지 안에서 매물 API를 호출해 전세·월세 매물을
+가져온다 (`crawl_complex.py`와 같은 방식이라 서버가 필요 없음).
+
+- 현재는 샘플 단계: 단지 127071 하나, 전세(B1)·월세(B2)
+- `app/src/NaverBridge.tsx`: WebView 수집기, `app/src/listing.ts`: 응답 해석·정렬·필터
+- "원본 데이터" 화면에서 네이버 응답 원본을 보고 공유할 수 있음 (필드 확인용)
+- APK 빌드: `app/**`가 바뀌어 푸시되면 `.github/workflows/android-apk.yml`이 빌드해서
+  GitHub Releases에 "앱 빌드 #N"으로 올린다
