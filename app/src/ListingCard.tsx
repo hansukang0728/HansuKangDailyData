@@ -84,6 +84,11 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
         <Text style={styles.price}>{formatPrice(l)}</Text>
         {prevPrice ? <Text style={styles.prevPrice}>{prevPrice}</Text> : null}
       </View>
+      {l.priceVaries && l.priceMax ? (
+        <Text style={styles.priceVaries}>
+          중개사별 가격 다름 · 최저 {formatPrice(l)} ~ 최고 {formatPrice({ ...l, ...l.priceMax })}
+        </Text>
+      ) : null}
       <Text style={styles.spec}>
         {[l.floor, l.direction, `공급 ${l.supplySpace}㎡`].filter(Boolean).join(' · ')}
       </Text>
@@ -113,6 +118,12 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
                   </Pressable>
                 ) : null}
               </View>
+              {l.priceVaries && b.deposit !== undefined ? (
+                <Text style={[styles.brokerPrice, b.deposit === l.deposit && b.rent === l.rent && styles.brokerPriceLow]}>
+                  {b.kind ?? l.kind} {formatPrice({ ...l, kind: b.kind ?? l.kind, deposit: b.deposit, rent: b.rent ?? 0 })}
+                  {b.deposit === l.deposit && b.rent === l.rent ? ' · 최저' : ''}
+                </Text>
+              ) : null}
               <Text style={styles.feature}>{b.feature || '목록에 설명이 없어요. 전체 설명 보기를 눌러주세요.'}</Text>
               {b.confirmDate ? <Text style={styles.meta}>확인일 {b.confirmDate}</Text> : null}
             </View>
@@ -182,6 +193,9 @@ const styles = StyleSheet.create({
   starOn: { color: '#B7791F' },
   hideText: { fontSize: 13, fontWeight: '600', color: C.error },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' },
+  priceVaries: { fontSize: 12, fontWeight: '600', color: C.rent },
+  brokerPrice: { fontSize: 14, fontWeight: '700', color: C.body },
+  brokerPriceLow: { color: C.accent },
   prevPrice: { fontSize: 13, color: C.muted, textDecorationLine: 'line-through' },
   history: { gap: 4, padding: 10, borderRadius: 10, backgroundColor: C.ground },
   historyRow: { flexDirection: 'row', gap: 10 },

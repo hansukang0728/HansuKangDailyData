@@ -11,6 +11,10 @@ export interface BrokerArticle {
   feature: string; // 이 중개사가 쓴 한 줄 설명 (목록 응답에 있을 때만)
   confirmDate: string;
   owner: boolean; // 집주인 확인(인증) 매물
+  // 이 중개사가 올린 가격 (중개사마다 다를 수 있음). 이전 저장본에는 없을 수 있다
+  kind?: TradeKind;
+  deposit?: number;
+  rent?: number;
 }
 
 export interface Listing {
@@ -31,6 +35,9 @@ export interface Listing {
   brokerArticles: BrokerArticle[];
   confirmDate: string;
   owner: boolean; // 중개사 중 한 곳이라도 집주인 확인 매물이면 true
+  // 중개사마다 올린 가격이 다를 때: deposit/rent는 가장 싼 가격, priceMax는 가장 비싼 가격
+  priceVaries?: boolean;
+  priceMax?: { deposit: number; rent: number };
 }
 
 const DIRECTIONS: Record<string, string> = {
@@ -62,28 +69,51 @@ export function isOwnerArticle(x: any, depth = 0): boolean {
   return false;
 }
 
+function priceOf(x: any): { deposit: number; rent: number; kind: TradeKind } {
+  const price = x?.priceInfo ?? {};
+  const rent = firstNumber(price, ['rentPrice', 'monthlyRentPrice', 'monthlyRent']);
+  const deposit = firstNumber(price, ['warrantyPrice', 'depositPrice', 'deposit', 'dealPrice']);
+  const tradeType = String(x?.tradeType ?? x?.tradeTypeCode ?? '');
+  return { deposit, rent, kind: tradeType === 'B2' || rent > 0 ? '월세' : '전세' };
+}
+
+// 세입자 입장에서 싼 순서: 월세가 낮을수록, 같으면 보증금이 낮을수록
+function cheaper(a: { deposit: number; rent: number }, b: { deposit: number; rent: number }): number {
+  return a.rent - b.rent || a.deposit - b.deposit;
+}
+
 export function toListing(item: any, complexNumber: string): Listing {
   const a = item.representativeArticleInfo ?? item;
   const detail = a.articleDetail ?? {};
   const floorDetail = detail.floorDetailInfo ?? {};
   const space = a.spaceInfo ?? {};
-  const price = a.priceInfo ?? {};
-
-  const rent = firstNumber(price, ['rentPrice', 'monthlyRentPrice', 'monthlyRent']);
-  const deposit = firstNumber(price, ['warrantyPrice', 'depositPrice', 'deposit', 'dealPrice']);
-  const tradeType = String(a.tradeType ?? a.tradeTypeCode ?? '');
-  const kind: TradeKind = tradeType === 'B2' || rent > 0 ? '월세' : '전세';
+  const rep = priceOf(a);
 
   const dup = item.duplicatedArticleInfo;
   const sources: any[] = dup?.articleInfoList?.length ? dup.articleInfoList : [a];
-  const brokerArticles: BrokerArticle[] = sources.map((x: any) => ({
-    articleNumber: String(x?.articleNumber ?? ''),
-    broker: x?.brokerInfo?.brokerageName ?? '',
-    feature: x?.articleDetail?.articleFeatureDescription ?? x?.articleFeatureDescription ?? '',
-    confirmDate: x?.verificationInfo?.articleConfirmDate ?? '',
-    owner: isOwnerArticle(x),
-  }));
+  const brokerArticles: BrokerArticle[] = sources.map((x: any) => {
+    // 가격 정보가 없는 항목은 대표 매물 가격으로 본다
+    const p = x?.priceInfo ? priceOf(x) : rep;
+    return {
+      articleNumber: String(x?.articleNumber ?? ''),
+      broker: x?.brokerInfo?.brokerageName ?? '',
+      feature: x?.articleDetail?.articleFeatureDescription ?? x?.articleFeatureDescription ?? '',
+      confirmDate: x?.verificationInfo?.articleConfirmDate ?? '',
+      owner: isOwnerArticle(x),
+      ...p,
+    };
+  });
   const brokers = brokerArticles.map((b) => b.broker).filter(Boolean);
+
+  // 대표 매물과 같은 거래유형 중에서 가장 싼/비싼 가격. 네이버가 대표 중개사를 바꿔도
+  // 가격변동으로 잘못 잡히지 않도록 목록 가격은 가장 싼 가격으로 통일한다
+  const offers = brokerArticles
+    .filter((b) => b.kind === rep.kind && (b.deposit || b.rent))
+    .map((b) => ({ deposit: b.deposit ?? 0, rent: b.rent ?? 0 }))
+    .sort(cheaper);
+  const low = offers[0] ?? rep;
+  const high = offers[offers.length - 1] ?? rep;
+  const priceVaries = offers.some((o) => cheaper(o, low) !== 0);
 
   const target = floorDetail.targetFloor;
   const total = floorDetail.totalFloor;
@@ -98,14 +128,16 @@ export function toListing(item: any, complexNumber: string): Listing {
     supplySpace: Number(space.supplySpace ?? 0),
     typeName: space.nameType ?? '',
     direction: DIRECTIONS[detail.direction] ?? detail.direction ?? '',
-    kind,
-    deposit,
-    rent,
+    kind: rep.kind,
+    deposit: low.deposit,
+    rent: low.rent,
     feature: detail.articleFeatureDescription ?? '',
     brokers,
     brokerArticles,
     confirmDate: a.verificationInfo?.articleConfirmDate ?? '',
     owner: isOwnerArticle(a) || brokerArticles.some((b) => b.owner),
+    priceVaries,
+    priceMax: priceVaries ? { deposit: high.deposit, rent: high.rent } : undefined,
   };
 }
 
