@@ -516,11 +516,12 @@ export default function App() {
                     return (
                       <Pressable
                         key={st}
+                        style={[styles.pill, pillStyle[st].box, on && styles.pillOn]}
                         onPress={() => setFilters({ ...filters, statuses: toggle(filters.statuses, st) as StatusFilter[] })}
                         accessibilityLabel={`${STATUS_LABELS[st]} 매물만 보기`}
                         accessibilityState={{ selected: on }}
                       >
-                        <Text style={[styles.pill, pillStyle[st], on && styles.pillOn]}>
+                        <Text style={[styles.pillText, pillStyle[st].text]}>
                           {STATUS_LABELS[st]} {counts[st]}
                         </Text>
                       </Pressable>
@@ -668,11 +669,17 @@ const styles = StyleSheet.create({
   emptyButtonText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
   subtitle: { fontSize: 12, color: C.muted, marginTop: 2 },
   summary: { flexDirection: 'row', gap: 6, marginTop: 8 },
-  pill: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, fontSize: 12, fontWeight: '600', overflow: 'hidden' },
-  pillNew: { backgroundColor: '#FCE9D6', color: '#8A3E05' },
-  pillChanged: { backgroundColor: '#DDE9F7', color: '#1D4E89' },
-  pillEnded: { backgroundColor: '#ECEAE6', color: '#55524C' },
-  pillOn: { borderWidth: 2, borderColor: C.ink },
+  // 배경·테두리는 바깥 버튼에 두고 테두리 두께는 늘 같게 한다
+  // (안드로이드에서 Text에 테두리를 켰다 끄면 글자가 사라지는 문제가 있어서)
+  pill: { paddingHorizontal: 9, paddingVertical: 2, borderRadius: 999, borderWidth: 2, borderColor: 'transparent' },
+  pillOn: { borderColor: C.ink },
+  pillText: { fontSize: 12, fontWeight: '600' },
+  pillNew: { backgroundColor: '#FCE9D6' },
+  pillNewText: { color: '#8A3E05' },
+  pillChanged: { backgroundColor: '#DDE9F7' },
+  pillChangedText: { color: '#1D4E89' },
+  pillEnded: { backgroundColor: '#ECEAE6' },
+  pillEndedText: { color: '#55524C' },
   refresh: { height: 44, paddingHorizontal: 16, borderRadius: 22, backgroundColor: C.accent, justifyContent: 'center' },
   refreshDisabled: { opacity: 0.6 },
   refreshText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
@@ -741,4 +748,8 @@ const styles = StyleSheet.create({
   rawText: { fontFamily: 'monospace', fontSize: 11, color: C.ink },
 });
 
-const pillStyle = { new: styles.pillNew, changed: styles.pillChanged, ended: styles.pillEnded };
+const pillStyle = {
+  new: { box: styles.pillNew, text: styles.pillNewText },
+  changed: { box: styles.pillChanged, text: styles.pillChangedText },
+  ended: { box: styles.pillEnded, text: styles.pillEndedText },
+};
