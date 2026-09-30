@@ -430,7 +430,7 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
         <Text style={styles.message}>단지 위치가 아직 없어요. 목록에서 새로고침을 한 번 해 주세요.</Text>
       ) : !center || !cats.length ? (
         !shuttle ? (
-          <Text style={styles.message}>위에서 단지와 시설(지하철·학교·병원 등) 또는 셔틀을 골라 주세요.</Text>
+          <Text style={styles.message}>위에서 단지와 시설(지하철·학교·병원 등 한 종류) 또는 셔틀을 골라 주세요.</Text>
         ) : !center && cats.length ? (
           <Text style={styles.message}>단지를 고르면 주변 시설을 보여줘요.</Text>
         ) : null
@@ -454,7 +454,7 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
                   {cat.label} {items.length}곳{items[0] ? ` · 가장 가까운 곳 도보 ${walkMinutes(items[0].distance)}분` : ''}
                 </Text>
               </View>
-              {items.slice(0, 8).map((p) => (
+              {items.map((p) => (
                 <Pressable key={p.id} style={styles.place} onPress={() => focus(p)} onLongPress={() => p.url && Linking.openURL(p.url)}>
                   <View style={styles.flex}>
                     <Text style={styles.placeName} numberOfLines={1}>
@@ -470,7 +470,6 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
                   </Text>
                 </Pressable>
               ))}
-              {items.length > 8 ? <Text style={styles.more}>외 {items.length - 8}곳 (지도에 모두 표시)</Text> : null}
             </View>
           );
         })
@@ -520,7 +519,7 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
             key={c.id}
             label={c.label}
             on={cats.includes(c.id)}
-            onPress={() => setCats(cats.includes(c.id) ? cats.filter((x) => x !== c.id) : [...cats, c.id])}
+            onPress={() => setCats(cats.includes(c.id) ? [] : [c.id])}
           />
         ))}
       </ScrollView>
