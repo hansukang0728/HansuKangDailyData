@@ -59,6 +59,9 @@ WebView가 네이버 지도 페이지를 열고, 그 페이지 안에서 매물 
   지도와 목록(거리·도보 분)으로 보여줌 (`app/src/MapScreen.tsx`, `app/src/kakao.ts`, 7일 캐시).
   카카오 REST API 키는 앱에서 입력해 폰에만 저장 (저장소에 넣지 않음). 카카오 지도는 JavaScript 키와 도메인 https://localhost 등록 필요
   회사 셔틀 출근/퇴근 칩: 정류장(`app/src/shuttle.ts`)을 카카오 장소 검색으로 찾아 순서대로 지도에 표시하고 고른 단지에서의 거리 안내. 처음 들어가면 아무것도 고르지 않은 상태. 시설은 한 번에 한 종류만 고르고, 찾은 곳은 전부 목록에 표시
+- 기기 간 공유: 필터 줄의 "공유" → Firebase 실시간 데이터베이스 주소와 가족 코드를 넣으면 메모·문의 기록·즐겨찾기·관심 목록을
+  여러 기기에서 같이 봄 (`app/src/sync.ts`, `app/src/SyncSettings.tsx`). 항목별 마지막 수정 시각으로 나중에 저장한 쪽이 이김.
+  집 id가 기기마다 다를 수 있어 매물번호가 겹치는 집으로 맞춤. 신규/가격변동 판정 기록은 기기마다 따로. 주소·코드는 폰에만 저장
 - 평면도: 카드의 면적·타입 배지를 누르면 `complex/pyeongGroups`·`complex/pyeong`·`complex/maintenanceFee`
   (front-api)로 타입 목록·평면도·관리비를 받아 앱 화면에 표시 (`app/src/complexInfo.ts`, 30일 캐시)
 - 필터: 단지, 전용 59–84㎡, 타입, 보증금(3~12억)·월세 상한, 집주인만 (`app/src/filters.ts`)

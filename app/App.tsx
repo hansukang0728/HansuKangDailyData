@@ -1,6 +1,7 @@
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AppState,
   FlatList,
   Pressable,
   ScrollView,
@@ -25,6 +26,20 @@ import { ListingCard } from './src/ListingCard';
 import { MapScreen } from './src/MapScreen';
 import { NaverBridge, NaverBridgeHandle } from './src/NaverBridge';
 import { ProfileManager } from './src/ProfileManager';
+import {
+  emptyMeta,
+  loadMeta,
+  loadProfilesAt,
+  loadSyncConfig,
+  saveMeta,
+  saveProfilesAt,
+  saveSyncConfig,
+  SyncConfig,
+  SyncMeta,
+  syncProfile,
+  syncProfiles,
+} from './src/sync';
+import { SyncSettings } from './src/SyncSettings';
 import {
   loadActiveProfile,
   loadFavorites,
@@ -95,6 +110,14 @@ export default function App() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({}); // 집 id → 메모
   const [inquiries, setInquiries] = useState<Record<string, Inquiry>>({}); // 집 id → 문의 기록
+  // 기기 간 공유 (Firebase). meta는 항목별 마지막 수정 시각
+  const [syncConfig, setSyncConfig] = useState<SyncConfig>();
+  const [syncMeta, setSyncMeta] = useState<SyncMeta>(emptyMeta());
+  const [profilesAt, setProfilesAt] = useState(0);
+  const [showSync, setShowSync] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('');
+  const syncWanted = useRef(0); // 마지막으로 바뀐 시각 (잠시 뒤 동기화)
   const [loaded, setLoaded] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [tab, setTab] = useState<Tab>('전체');
@@ -115,8 +138,10 @@ export default function App() {
   // 관심 목록과 마지막으로 보던 목록을 불러온다
   useEffect(() => {
     (async () => {
-      const [ps, active] = await Promise.all([loadProfiles(), loadActiveProfile()]);
+      const [ps, active, sc, pat] = await Promise.all([loadProfiles(), loadActiveProfile(), loadSyncConfig(), loadProfilesAt()]);
       setProfiles(ps);
+      setSyncConfig(sc);
+      setProfilesAt(pat);
       setProfileId(ps.find((p) => p.id === active)?.id ?? ps[0].id);
       setProfilesLoaded(true);
     })();
@@ -127,12 +152,13 @@ export default function App() {
     if (!profilesLoaded) return;
     let alive = true;
     (async () => {
-      const [saved, savedFilters, savedFavs, savedNotes, savedInq] = await Promise.all([
+      const [saved, savedFilters, savedFavs, savedNotes, savedInq, savedMeta] = await Promise.all([
         loadResult(profileId),
         loadFilters(profileId),
         loadFavorites(profileId),
         loadNotes(profileId),
         loadInquiries(profileId),
+        loadMeta(profileId),
       ]);
       if (!alive) return;
       setHouses(saved?.houses ?? []);
@@ -145,7 +171,9 @@ export default function App() {
       setFavorites(savedFavs ?? []);
       setNotes(savedNotes ?? {});
       setInquiries(savedInq ?? {});
+      setSyncMeta(savedMeta);
       setLoaded(true);
+      syncWanted.current = Date.now(); // 목록을 열면 바로 한 번 맞춘다
     })();
     return () => {
       alive = false;
@@ -168,6 +196,10 @@ export default function App() {
     if (loaded) saveInquiries(profileId, inquiries);
   }, [inquiries, loaded, profileId]);
 
+  useEffect(() => {
+    if (loaded) saveMeta(profileId, syncMeta);
+  }, [syncMeta, loaded, profileId]);
+
   const profile = profiles.find((p) => p.id === profileId) ?? profiles[0];
   const complexes = profile.complexes;
 
@@ -189,6 +221,7 @@ export default function App() {
     setFavorites([]);
     setNotes({});
     setInquiries({});
+    setSyncMeta(emptyMeta());
     setRawByComplex({});
     setErrors([]);
     setExpanded({});
@@ -200,6 +233,10 @@ export default function App() {
   const changeProfiles = (ps: Profile[]) => {
     setProfiles(ps);
     saveProfiles(ps);
+    const at = Date.now();
+    setProfilesAt(at);
+    saveProfilesAt(at);
+    syncWanted.current = at;
   };
 
   const deleteProfile = (id: string) => {
@@ -370,6 +407,13 @@ export default function App() {
       persist(nextHouses, at, names, times);
     }
     setBusy(false);
+    syncWanted.current = Date.now(); // 새로 본 집에 다른 기기의 메모가 붙을 수 있다
+  };
+
+  const touch = (kind: keyof SyncMeta, id: string) => {
+    const at = Date.now();
+    setSyncMeta((m) => ({ ...m, [kind]: { ...m[kind], [id]: at } }));
+    syncWanted.current = at;
   };
 
   const setNote = (id: string, text: string) => {
@@ -377,10 +421,100 @@ export default function App() {
     if (text.trim()) next[id] = text;
     else delete next[id];
     setNotes(next);
+    touch('notes', id);
   };
 
-  const toggleFav = (id: string) =>
+  const setInquiry = (id: string, v: Inquiry) => {
+    setInquiries({ ...inquiries, [id]: v });
+    touch('inquiries', id);
+  };
+
+  // Firebase와 맞추기: 이 목록의 메모·문의·즐겨찾기, 그리고 관심 목록 전체
+  const runSync = async () => {
+    if (!syncConfig || !loaded || syncing) return;
+    syncWanted.current = 0;
+    setSyncing(true);
+    try {
+      const r = await syncProfile(syncConfig, profileId, { notes, inquiries, favorites, meta: syncMeta }, houses);
+      // 기다리는 동안 이 기기에서 더 고친 게 있을 수 있으니, 다른 기기에서 받아 온 항목만 지금 상태 위에 덮는다
+      const pulled = (kind: keyof SyncMeta) => Object.keys(r.data.meta[kind]).filter((id) => r.data.meta[kind][id] !== syncMeta[kind][id]);
+      const pulledNotes = pulled('notes');
+      const pulledInq = pulled('inquiries');
+      const pulledFav = pulled('favorites');
+      if (pulledNotes.length) {
+        setNotes((cur) => {
+          const n = { ...cur };
+          for (const id of pulledNotes) {
+            if (r.data.notes[id]) n[id] = r.data.notes[id];
+            else delete n[id];
+          }
+          return n;
+        });
+      }
+      if (pulledInq.length) {
+        setInquiries((cur) => {
+          const n = { ...cur };
+          for (const id of pulledInq) {
+            if (r.data.inquiries[id]) n[id] = r.data.inquiries[id];
+            else delete n[id];
+          }
+          return n;
+        });
+      }
+      if (pulledFav.length) {
+        setFavorites((cur) => {
+          const set = new Set(cur);
+          for (const id of pulledFav) {
+            if (r.data.favorites.includes(id)) set.add(id);
+            else set.delete(id);
+          }
+          return [...set];
+        });
+      }
+      setSyncMeta((cur) => {
+        const n: SyncMeta = { notes: { ...cur.notes }, inquiries: { ...cur.inquiries }, favorites: { ...cur.favorites } };
+        for (const id of pulledNotes) n.notes[id] = r.data.meta.notes[id];
+        for (const id of pulledInq) n.inquiries[id] = r.data.meta.inquiries[id];
+        for (const id of pulledFav) n.favorites[id] = r.data.meta.favorites[id];
+        return n;
+      });
+      const p = await syncProfiles(syncConfig, profiles, profilesAt);
+      if (p.changed) {
+        setProfiles(p.profiles);
+        saveProfiles(p.profiles);
+        setProfilesAt(p.at);
+        saveProfilesAt(p.at);
+      }
+      const t = new Date();
+      const hhmm = `${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}`;
+      setSyncStatus(`${hhmm} 동기화 완료 · 받음 ${r.pulled} · 보냄 ${r.pushed}${p.changed ? ' · 관심 목록 갱신' : ''}`);
+    } catch (e: any) {
+      setSyncStatus(`동기화 실패: ${e?.message ?? e}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+  const runSyncRef = useRef(runSync);
+  runSyncRef.current = runSync;
+
+  // 바뀐 뒤 잠시 기다렸다가(연타 방지) 맞춘다. 앱을 다시 열 때도
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (syncWanted.current && Date.now() - syncWanted.current > 2500) runSyncRef.current();
+    }, 1000);
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') syncWanted.current = Date.now();
+    });
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, []);
+
+  const toggleFav = (id: string) => {
     setFavorites(favorites.includes(id) ? favorites.filter((f) => f !== id) : [...favorites, id]);
+    touch('favorites', id);
+  };
 
   // 종료 매물을 목록에서 지운다 (같은 집이 다시 올라오면 알아볼 수 있게 기록은 남긴다)
   const hideWhere = (pred: (h: House) => boolean) => {
@@ -421,7 +555,7 @@ export default function App() {
       note={notes[h.id] ?? ''}
       onChangeNote={(t) => setNote(h.id, t)}
       inquiry={inquiries[h.id]}
-      onChangeInquiry={(v) => setInquiries({ ...inquiries, [h.id]: v })}
+      onChangeInquiry={(v) => setInquiry(h.id, v)}
       onHide={() => hideWhere((x) => x.id === h.id)}
       onOpenPage={(url, title) => setViewer({ url, title })}
       onOpenFloorPlan={() => setFloorPlanFor(h.listing)}
@@ -645,6 +779,7 @@ export default function App() {
               <Chip key={key} label={label} variant="sort" on={sort === key} onPress={() => setSort(key)} />
             ))}
             <Chip label="주변 지도" on={false} onPress={() => setShowMap(true)} />
+            <Chip label={syncConfig ? (syncing ? '공유 중…' : '공유 ✓') : '공유'} on={false} onPress={() => setShowSync(true)} />
             <Chip label="원본 데이터" on={false} onPress={() => setScreen('raw')} />
           </ScrollView>
 
@@ -671,6 +806,23 @@ export default function App() {
       ) : null}
 
       {showMap ? <MapScreen complexes={mapComplexes} topPad={topPad} onClose={() => setShowMap(false)} /> : null}
+
+      {showSync ? (
+        <SyncSettings
+          config={syncConfig}
+          status={syncStatus}
+          syncing={syncing}
+          topPad={topPad}
+          onSave={(c) => {
+            setSyncConfig(c);
+            saveSyncConfig(c);
+            setSyncStatus('');
+            if (c) syncWanted.current = Date.now();
+          }}
+          onSyncNow={() => runSync()}
+          onClose={() => setShowSync(false)}
+        />
+      ) : null}
 
       {showManager ? (
         <ProfileManager
