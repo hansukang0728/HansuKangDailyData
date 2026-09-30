@@ -21,6 +21,7 @@ import { FloorPlanSheet } from './src/FloorPlanSheet';
 import { activeCount, DEFAULT_FILTERS, Filters, matches, STATUS_LABELS, StatusFilter, toggle } from './src/filters';
 import { compareListings, isOwnerArticle, Listing, OWNER_VERIFICATION_TYPES, SortKey, toListing, typeKey, typeLabel } from './src/listing';
 import { ListingCard } from './src/ListingCard';
+import { MapScreen } from './src/MapScreen';
 import { NaverBridge, NaverBridgeHandle } from './src/NaverBridge';
 import { ProfileManager } from './src/ProfileManager';
 import {
@@ -74,6 +75,7 @@ export default function App() {
   const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showManager, setShowManager] = useState(false);
+  const [showMap, setShowMap] = useState(false);
   const [pageStatus, setPageStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [pageDetail, setPageDetail] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -188,6 +190,18 @@ export default function App() {
   };
   const rawItems = useMemo(() => Object.values(rawByComplex).flat(), [rawByComplex]);
   // 목록에서 뺀 단지의 기록은 보이지 않게
+  // 지도용 단지 위치: 저장된 매물의 좌표 중 단지별 첫 번째
+  const mapComplexes = useMemo(
+    () =>
+      complexes.map((cn) => {
+        const withPos = houses.find((h) => h.listing.complexNumber === cn && h.listing.lat && h.listing.lng);
+        return { number: cn, name: nameOf(cn), lat: withPos?.listing.lat, lng: withPos?.listing.lng };
+      }),
+    // nameOf는 complexNames·profile에서 계산되므로 둘을 대신 넣는다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [complexes, houses, complexNames, profile],
+  );
+
   // 매물번호 → 이번 실행에서 받은 원본 항목 (매물 하나의 원본 공유용)
   const rawByArticle = useMemo(() => {
     const m = new Map<string, any>();
@@ -589,6 +603,7 @@ export default function App() {
             {SORTS.map(([key, label]) => (
               <Chip key={key} label={label} variant="sort" on={sort === key} onPress={() => setSort(key)} />
             ))}
+            <Chip label="주변 지도" on={false} onPress={() => setShowMap(true)} />
             <Chip label="원본 데이터" on={false} onPress={() => setScreen('raw')} />
           </ScrollView>
 
@@ -613,6 +628,8 @@ export default function App() {
           onClose={() => setFloorPlanFor(undefined)}
         />
       ) : null}
+
+      {showMap ? <MapScreen complexes={mapComplexes} topPad={topPad} onClose={() => setShowMap(false)} /> : null}
 
       {showManager ? (
         <ProfileManager

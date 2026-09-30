@@ -42,6 +42,9 @@ export interface Listing {
   priceVaries?: boolean;
   priceMin?: { deposit: number; rent: number };
   priceMax?: { deposit: number; rent: number };
+  // 단지 위치 (네이버 address.coordinates). 이전 저장본에는 없을 수 있다
+  lat?: number;
+  lng?: number;
 }
 
 export const DIRECTIONS: Record<string, string> = {
@@ -153,6 +156,8 @@ export function toListing(item: any, complexNumber: string): Listing {
     priceVaries,
     priceMin: priceVaries ? { deposit: low.deposit, rent: low.rent } : undefined,
     priceMax: priceVaries ? { deposit: high.deposit, rent: high.rent } : undefined,
+    lat: Number(a.address?.coordinates?.yCoordinate) || undefined,
+    lng: Number(a.address?.coordinates?.xCoordinate) || undefined,
   };
 }
 
