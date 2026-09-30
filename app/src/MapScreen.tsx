@@ -16,7 +16,7 @@ import {
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 
 import { Chip } from './Chip';
-import { CATEGORIES, loadKakaoKey, Place, saveKakaoKey, searchPlaces, walkMinutes } from './kakao';
+import { CATEGORIES, cleanKakaoKey, loadKakaoKey, Place, saveKakaoKey, searchPlaces, walkMinutes } from './kakao';
 import { C } from './theme';
 
 export interface MapComplex {
@@ -146,7 +146,7 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
 
   const saveKey = async () => {
     await saveKakaoKey(keyInput);
-    setKey(keyInput.trim());
+    setKey(cleanKakaoKey(keyInput));
     setEditKey(false);
   };
 

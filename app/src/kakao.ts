@@ -49,9 +49,12 @@ export const loadKakaoKey = async () => {
   }
 };
 
+// 복사할 때 따라 들어온 공백·줄바꿈·"KakaoAK " 머리말 등을 떼어낸다 (REST API 키는 영문·숫자뿐)
+export const cleanKakaoKey = (key: string) => key.replace(/^\s*KakaoAK\s*/i, '').replace(/[^0-9a-zA-Z]/g, '');
+
 export const saveKakaoKey = async (key: string) => {
   try {
-    await AsyncStorage.setItem(KEY_STORAGE, key.trim());
+    await AsyncStorage.setItem(KEY_STORAGE, cleanKakaoKey(key));
   } catch {
     // 무시
   }
@@ -116,10 +119,20 @@ export async function searchPlaces(
   const places: Place[] = [];
   for (let page = 1; page <= 3; page++) {
     const res = await fetch(`${base}&x=${lng}&y=${lat}&radius=${radius}&sort=distance&size=15&page=${page}`, {
-      headers: { Authorization: `KakaoAK ${key}` },
+      headers: { Authorization: `KakaoAK ${cleanKakaoKey(key)}` },
     });
     if (res.status === 401 || res.status === 403) {
-      throw new Error('카카오 API 키가 맞지 않거나 카카오맵 사용 설정이 꺼져 있어요');
+      // 카카오가 보내준 원인(errorType / message)을 같이 보여줘야 키 문제인지 설정 문제인지 알 수 있다
+      let reason = '';
+      try {
+        const err = await res.json();
+        reason = [err?.errorType, err?.message ?? err?.msg].filter(Boolean).join(': ');
+      } catch {
+        // 무시
+      }
+      throw new Error(
+        `카카오 API 키가 맞지 않거나 카카오맵 사용 설정이 꺼져 있어요 (${res.status}${reason ? ` ${reason}` : ''})`,
+      );
     }
     if (!res.ok) throw new Error(`카카오 API 오류 ${res.status}`);
     const body = await res.json();
