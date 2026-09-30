@@ -18,7 +18,7 @@ import { loadTypes } from './src/complexInfo';
 import { DEFAULT_PROFILES, DELAY_BETWEEN_COMPLEXES_MS, Profile } from './src/complexes';
 import { FilterPanel } from './src/FilterPanel';
 import { FloorPlanSheet } from './src/FloorPlanSheet';
-import { activeCount, DEFAULT_FILTERS, Filters, matches } from './src/filters';
+import { activeCount, DEFAULT_FILTERS, Filters, matches, STATUS_LABELS, StatusFilter, toggle } from './src/filters';
 import { compareListings, isOwnerArticle, Listing, OWNER_VERIFICATION_TYPES, SortKey, toListing, typeKey, typeLabel } from './src/listing';
 import { ListingCard } from './src/ListingCard';
 import { NaverBridge, NaverBridgeHandle } from './src/NaverBridge';
@@ -260,6 +260,10 @@ export default function App() {
     const favSet = new Set(favorites);
     const filtered = shown.filter((h) => {
       if (tab === '즐겨찾기') return favSet.has(h.id);
+      if (filters.statuses.length) {
+        const st = houseStatus(h);
+        if (!st || !filters.statuses.includes(st)) return false;
+      }
       return (tab === '전체' || h.listing.kind === tab) && matches(h.listing, filters);
     });
     // 종료 매물은 맨 아래로
@@ -393,6 +397,7 @@ export default function App() {
                 complexes={complexes.map((cn) => ({ number: cn, name: nameOf(cn) }))}
                 types={typeOptions}
                 ownerCount={shown.filter((h) => h.listing.owner && !h.endedAt).length}
+                statusCounts={counts}
               />
             </View>
           ) : null}
@@ -506,9 +511,21 @@ export default function App() {
               </Text>
               {fetchedAt ? (
                 <View style={styles.summary}>
-                  <Text style={[styles.pill, styles.pillNew]}>신규 {counts.new}</Text>
-                  <Text style={[styles.pill, styles.pillChanged]}>가격변동 {counts.changed}</Text>
-                  <Text style={[styles.pill, styles.pillEnded]}>종료 {counts.ended}</Text>
+                  {(['new', 'changed', 'ended'] as StatusFilter[]).map((st) => {
+                    const on = filters.statuses.includes(st);
+                    return (
+                      <Pressable
+                        key={st}
+                        onPress={() => setFilters({ ...filters, statuses: toggle(filters.statuses, st) as StatusFilter[] })}
+                        accessibilityLabel={`${STATUS_LABELS[st]} 매물만 보기`}
+                        accessibilityState={{ selected: on }}
+                      >
+                        <Text style={[styles.pill, pillStyle[st], on && styles.pillOn]}>
+                          {STATUS_LABELS[st]} {counts[st]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
               ) : null}
             </View>
@@ -655,6 +672,7 @@ const styles = StyleSheet.create({
   pillNew: { backgroundColor: '#FCE9D6', color: '#8A3E05' },
   pillChanged: { backgroundColor: '#DDE9F7', color: '#1D4E89' },
   pillEnded: { backgroundColor: '#ECEAE6', color: '#55524C' },
+  pillOn: { borderWidth: 2, borderColor: C.ink },
   refresh: { height: 44, paddingHorizontal: 16, borderRadius: 22, backgroundColor: C.accent, justifyContent: 'center' },
   refreshDisabled: { opacity: 0.6 },
   refreshText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
@@ -722,3 +740,5 @@ const styles = StyleSheet.create({
   },
   rawText: { fontFamily: 'monospace', fontSize: 11, color: C.ink },
 });
+
+const pillStyle = { new: styles.pillNew, changed: styles.pillChanged, ended: styles.pillEnded };

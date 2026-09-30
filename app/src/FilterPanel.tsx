@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from './Chip';
-import { DEFAULT_FILTERS, DEPOSIT_OPTIONS, Filters, RENT_OPTIONS, toggle } from './filters';
+import { DEFAULT_FILTERS, DEPOSIT_OPTIONS, Filters, RENT_OPTIONS, STATUS_LABELS, StatusFilter, toggle } from './filters';
 import { C } from './theme';
 
 interface Props {
@@ -10,9 +10,10 @@ interface Props {
   complexes: { number: string; name: string }[];
   types: { key: string; label: string; count: number }[];
   ownerCount: number;
+  statusCounts: Record<StatusFilter, number>;
 }
 
-export function FilterPanel({ filters: f, onChange, complexes, types, ownerCount }: Props) {
+export function FilterPanel({ filters: f, onChange, complexes, types, ownerCount, statusCounts }: Props) {
   const set = (patch: Partial<Filters>) => onChange({ ...f, ...patch });
   return (
     <View style={styles.panel}>
@@ -46,6 +47,17 @@ export function FilterPanel({ filters: f, onChange, complexes, types, ownerCount
       <Section title="월세 (만원)">
         {RENT_OPTIONS.map(([v, label]) => (
           <Chip key={label} label={label} on={f.rentMax === v} onPress={() => set({ rentMax: v })} />
+        ))}
+      </Section>
+      <Section title="변동 (신규·가격변동은 24시간 동안)">
+        <Chip label="전체" on={f.statuses.length === 0} onPress={() => set({ statuses: [] })} />
+        {(Object.keys(STATUS_LABELS) as StatusFilter[]).map((s) => (
+          <Chip
+            key={s}
+            label={`${STATUS_LABELS[s]} (${statusCounts[s]})`}
+            on={f.statuses.includes(s)}
+            onPress={() => set({ statuses: toggle(f.statuses, s) as StatusFilter[] })}
+          />
         ))}
       </Section>
       <Section title="기타">

@@ -1,4 +1,8 @@
 import { inTargetArea, Listing, typeKey } from './listing';
+import { HouseStatus } from './tracking';
+
+export type StatusFilter = Exclude<HouseStatus, null>; // 'new' | 'changed' | 'ended'
+export const STATUS_LABELS: Record<StatusFilter, string> = { new: '신규', changed: '가격변동', ended: '종료' };
 
 export interface Filters {
   complexes: string[]; // 비어 있으면 전체
@@ -7,6 +11,7 @@ export interface Filters {
   depositMax: number | null; // 원
   rentMax: number | null; // 원 (월세에만 적용)
   ownerOnly: boolean;
+  statuses: StatusFilter[]; // 신규·가격변동·종료 중 고른 것만, 비어 있으면 전체
 }
 
 export const DEFAULT_FILTERS: Filters = {
@@ -16,6 +21,7 @@ export const DEFAULT_FILTERS: Filters = {
   depositMax: null,
   rentMax: null,
   ownerOnly: false,
+  statuses: [],
 };
 
 const EOK = 100_000_000;
@@ -57,7 +63,8 @@ export function activeCount(f: Filters): number {
     (f.types.length ? 1 : 0) +
     (f.depositMax !== null ? 1 : 0) +
     (f.rentMax !== null ? 1 : 0) +
-    (f.ownerOnly ? 1 : 0)
+    (f.ownerOnly ? 1 : 0) +
+    (f.statuses.length ? 1 : 0)
   );
 }
 
