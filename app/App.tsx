@@ -18,6 +18,7 @@ import { loadTypes } from './src/complexInfo';
 import { DEFAULT_PROFILES, DELAY_BETWEEN_COMPLEXES_MS, Profile } from './src/complexes';
 import { FilterPanel } from './src/FilterPanel';
 import { FloorPlanSheet } from './src/FloorPlanSheet';
+import { Inquiry, isInquired } from './src/inquiry';
 import { activeCount, DEFAULT_FILTERS, Filters, matches, STATUS_LABELS, StatusFilter, toggle } from './src/filters';
 import { compareListings, isOwnerArticle, Listing, OWNER_VERIFICATION_TYPES, SortKey, toListing, typeKey, typeLabel } from './src/listing';
 import { ListingCard } from './src/ListingCard';
@@ -27,6 +28,7 @@ import { ProfileManager } from './src/ProfileManager';
 import {
   loadActiveProfile,
   loadFavorites,
+  loadInquiries,
   loadNotes,
   loadFilters,
   loadProfiles,
@@ -34,6 +36,7 @@ import {
   removeProfileData,
   saveActiveProfile,
   saveFavorites,
+  saveInquiries,
   saveNotes,
   saveFilters,
   saveProfiles,
@@ -42,8 +45,8 @@ import {
 import { C } from './src/theme';
 import { House, houseStatus, reconcile } from './src/tracking';
 
-type Tab = '전체' | '전세' | '월세' | '즐겨찾기';
-const TABS: Tab[] = ['전체', '전세', '월세', '즐겨찾기'];
+type Tab = '전체' | '전세' | '월세' | '즐겨찾기' | '문의';
+const TABS: Tab[] = ['전체', '전세', '월세', '즐겨찾기', '문의'];
 const SORTS: [SortKey, string][] = [
   ['rentAsc', '월세 낮은순'],
   ['rentDesc', '월세 높은순'],
@@ -91,6 +94,7 @@ export default function App() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({}); // 집 id → 메모
+  const [inquiries, setInquiries] = useState<Record<string, Inquiry>>({}); // 집 id → 문의 기록
   const [loaded, setLoaded] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [tab, setTab] = useState<Tab>('전체');
@@ -123,11 +127,12 @@ export default function App() {
     if (!profilesLoaded) return;
     let alive = true;
     (async () => {
-      const [saved, savedFilters, savedFavs, savedNotes] = await Promise.all([
+      const [saved, savedFilters, savedFavs, savedNotes, savedInq] = await Promise.all([
         loadResult(profileId),
         loadFilters(profileId),
         loadFavorites(profileId),
         loadNotes(profileId),
+        loadInquiries(profileId),
       ]);
       if (!alive) return;
       setHouses(saved?.houses ?? []);
@@ -139,6 +144,7 @@ export default function App() {
       setFilters({ ...DEFAULT_FILTERS, ...savedFilters, types });
       setFavorites(savedFavs ?? []);
       setNotes(savedNotes ?? {});
+      setInquiries(savedInq ?? {});
       setLoaded(true);
     })();
     return () => {
@@ -157,6 +163,10 @@ export default function App() {
   useEffect(() => {
     if (loaded) saveNotes(profileId, notes);
   }, [notes, loaded, profileId]);
+
+  useEffect(() => {
+    if (loaded) saveInquiries(profileId, inquiries);
+  }, [inquiries, loaded, profileId]);
 
   const profile = profiles.find((p) => p.id === profileId) ?? profiles[0];
   const complexes = profile.complexes;
@@ -178,6 +188,7 @@ export default function App() {
     setFilters(DEFAULT_FILTERS);
     setFavorites([]);
     setNotes({});
+    setInquiries({});
     setRawByComplex({});
     setErrors([]);
     setExpanded({});
@@ -280,10 +291,13 @@ export default function App() {
     return c;
   }, [shown]);
 
+  const inquiredCount = useMemo(() => shown.filter((h) => isInquired(inquiries[h.id])).length, [shown, inquiries]);
+
   const visible = useMemo(() => {
     const favSet = new Set(favorites);
     const filtered = shown.filter((h) => {
       if (tab === '즐겨찾기') return favSet.has(h.id);
+      if (tab === '문의') return isInquired(inquiries[h.id]);
       if (filters.statuses.length) {
         const st = houseStatus(h);
         if (!st || !filters.statuses.includes(st)) return false;
@@ -294,7 +308,7 @@ export default function App() {
     return filtered.sort(
       (a, b) => Number(!!a.endedAt) - Number(!!b.endedAt) || compareListings(a.listing, b.listing, sort),
     );
-  }, [shown, tab, sort, filters, favorites]);
+  }, [shown, tab, sort, filters, favorites, inquiries]);
 
   // 타입 칩: 고른 단지·면적 조건 안에서 실제로 있는 타입만 보여준다
   const typeOptions = useMemo(() => {
@@ -406,6 +420,8 @@ export default function App() {
       onToggleFav={() => toggleFav(h.id)}
       note={notes[h.id] ?? ''}
       onChangeNote={(t) => setNote(h.id, t)}
+      inquiry={inquiries[h.id]}
+      onChangeInquiry={(v) => setInquiries({ ...inquiries, [h.id]: v })}
       onHide={() => hideWhere((x) => x.id === h.id)}
       onOpenPage={(url, title) => setViewer({ url, title })}
       onOpenFloorPlan={() => setFloorPlanFor(h.listing)}
@@ -454,7 +470,13 @@ export default function App() {
           </View>
         ) : (
           <Text style={styles.empty}>
-            {tab === '즐겨찾기' ? '별표를 눌러 즐겨찾기에 추가하세요' : shown.length ? '조건에 맞는 매물이 없어요' : ''}
+            {tab === '즐겨찾기'
+              ? '별표를 눌러 즐겨찾기에 추가하세요'
+              : tab === '문의'
+                ? '카드를 펼쳐 문의 기록을 채우면 여기에 모여요'
+                : shown.length
+                  ? '조건에 맞는 매물이 없어요'
+                  : ''}
           </Text>
         )
       }
@@ -607,7 +629,7 @@ export default function App() {
             {TABS.map((t) => (
               <Pressable key={t} style={[styles.tab, tab === t && styles.tabOn]} onPress={() => setTab(t)}>
                 <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>
-                  {t === '즐겨찾기' ? `★ ${favorites.length}` : t}
+                  {t === '즐겨찾기' ? `★ ${favorites.length}` : t === '문의' ? `문의 ${inquiredCount}` : t}
                 </Text>
               </Pressable>
             ))}

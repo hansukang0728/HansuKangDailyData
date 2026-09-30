@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { areaLabel, articleUrl, complexUrl, formatPrice } from './listing';
+import { InquiryForm } from './InquiryForm';
+import { Inquiry, summarize } from './inquiry';
 import { C } from './theme';
 import { HistoryEvent, House, HouseStatus } from './tracking';
 
@@ -15,6 +17,8 @@ interface Props {
   onToggleFav: () => void;
   note?: string; // 이 매물에 적어 둔 메모 (부동산 통화 내용 등)
   onChangeNote?: (text: string) => void;
+  inquiry?: Inquiry; // 부동산 문의 기록 양식 값
+  onChangeInquiry?: (v: Inquiry) => void;
   onHide: () => void;
   onOpenPage: (url: string, title: string) => void;
   onOpenFloorPlan: () => void;
@@ -34,7 +38,8 @@ function historyText(e: HistoryEvent): string {
   return e.type === 'ended' ? label : `${label} · ${e.kind} ${price}`;
 }
 
-export function ListingCard({ house, status, fav, open, selected, onToggle, onToggleFav, onHide, onOpenPage, onOpenFloorPlan, ownerOnly, onShareRaw, note = '', onChangeNote }: Props) {
+export function ListingCard({ house, status, fav, open, selected, onToggle, onToggleFav, onHide, onOpenPage, onOpenFloorPlan, ownerOnly, onShareRaw, note = '', onChangeNote, inquiry, onChangeInquiry }: Props) {
+  const inquirySummary = summarize(inquiry, house.listing.kind);
   const l = house.listing;
   const [showAllBrokers, setShowAllBrokers] = useState(false);
   const ownerArticles = l.brokerArticles.filter((b) => b.owner);
@@ -107,6 +112,7 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
       </Text>
       {open ? (
         <View style={styles.brokerList}>
+          {onChangeInquiry ? <InquiryForm listing={l} value={inquiry ?? {}} onChange={onChangeInquiry} /> : null}
           {onChangeNote ? (
             <View style={styles.noteBox}>
               <Text style={styles.brokerHeading}>메모</Text>
@@ -183,6 +189,11 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
         </View>
       ) : (
         <>
+          {inquirySummary ? (
+            <Text style={styles.inquiryPreview} numberOfLines={2}>
+              {inquiry?.done === 'Y' ? '✓ ' : ''}문의: {inquirySummary}
+            </Text>
+          ) : null}
           {note.trim() ? (
             <Text style={styles.notePreview} numberOfLines={2}>
               메모: {note.trim()}
@@ -238,6 +249,7 @@ const styles = StyleSheet.create({
   noteBox: { gap: 6, padding: 10, borderRadius: 10, backgroundColor: C.noteBg, borderWidth: 1, borderColor: C.noteLine },
   noteInput: { minHeight: 88, padding: 10, borderRadius: 8, backgroundColor: C.surface, borderWidth: 1, borderColor: C.noteLine, fontSize: 14, lineHeight: 20, color: C.ink },
   noteHint: { fontSize: 11, color: C.muted },
+  inquiryPreview: { fontSize: 13, lineHeight: 19, fontWeight: '600', color: C.accentDark, marginTop: 2 },
   notePreview: { fontSize: 13, lineHeight: 19, fontWeight: '600', color: C.noteText, marginTop: 2 },
   history: { gap: 4, padding: 10, borderRadius: 10, backgroundColor: C.ground },
   historyRow: { flexDirection: 'row', gap: 10 },
