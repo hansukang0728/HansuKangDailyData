@@ -1,6 +1,6 @@
 // 단지 주변 인프라 지도: 관심 목록의 단지들을 지도에 찍고, 고른 단지 반경 안의
 // 지하철·학교·학원·마트·병원·공원 등을 카카오 로컬 API로 찾아 지도와 목록으로 보여준다.
-// 지도는 Leaflet + CARTO(OpenStreetMap) 타일이라 따로 키가 필요 없다.
+// 지도는 카카오 JavaScript 키가 있으면 카카오 지도, 없거나 불러오지 못하면 Leaflet + OpenStreetMap.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,7 +16,17 @@ import {
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 
 import { Chip } from './Chip';
-import { CATEGORIES, cleanKakaoKey, loadKakaoKey, Place, saveKakaoKey, searchPlaces, walkMinutes } from './kakao';
+import {
+  CATEGORIES,
+  cleanKakaoKey,
+  loadKakaoJsKey,
+  loadKakaoKey,
+  Place,
+  saveKakaoJsKey,
+  saveKakaoKey,
+  searchPlaces,
+  walkMinutes,
+} from './kakao';
 import { C } from './theme';
 
 export interface MapComplex {
@@ -35,20 +45,25 @@ interface Props {
 const RADII = [500, 1000, 2000];
 const DEFAULT_CATEGORIES = ['subway', 'school', 'academy', 'mart', 'hospital', 'park'];
 
-const MAP_HTML = `<!doctype html><html><head>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
-<style>
-html,body,#map{margin:0;height:100%}
-.cx{background:#fff;border:2px solid #1C1B19;border-radius:12px;padding:2px 7px;font:700 12px sans-serif;color:#1C1B19;white-space:nowrap;transform:translate(-50%,-50%);display:inline-block}
-.cx.on{background:#0E6560;border-color:#0E6560;color:#fff}
-</style></head><body><div id="map"></div>
-<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
+const COMMON_JS = `
 function post(o){window.ReactNativeWebView.postMessage(JSON.stringify(o));}
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+`;
+const COMMON_CSS = `
+html,body,#map{margin:0;height:100%}
+.cx{background:#fff;border:2px solid #1C1B19;border-radius:12px;padding:2px 7px;font:700 12px sans-serif;color:#1C1B19;white-space:nowrap;display:inline-block}
+.cx.on{background:#0E6560;border-color:#0E6560;color:#fff}
+`;
+
+// 키 없이 쓰는 지도: Leaflet + OpenStreetMap 타일
+const LEAFLET_HTML = `<!doctype html><html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<style>${COMMON_CSS}.cx{transform:translate(-50%,-50%)}</style></head><body><div id="map"></div>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>${COMMON_JS}
 var map=L.map('map').setView([37.43,127.0],15);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',{subdomains:'abcd',maxZoom:19,attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
 var layer=L.layerGroup().addTo(map);
 var markers={};
 window.update=function(d){
@@ -68,6 +83,52 @@ window.focusPlace=function(id){var m=markers[id];if(m){map.setView(m.getLatLng()
 post({type:'ready'});
 </script></body></html>`;
 
+// 카카오 지도 (JavaScript 키 + 플랫폼 Web 도메인 https://localhost 등록 필요)
+const kakaoHtml = (jsKey: string) => `<!doctype html><html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<style>${COMMON_CSS}
+.pt{width:12px;height:12px;border-radius:6px;border:1.5px solid #fff;box-shadow:0 0 2px rgba(0,0,0,.4)}
+.pop{background:#fff;border:1px solid #999;border-radius:8px;padding:5px 8px;font:12px sans-serif;color:#1C1B19;white-space:nowrap;margin-bottom:28px}
+</style></head><body><div id="map"></div>
+<script>${COMMON_JS}
+var failed=false;
+function fail(why){if(!failed){failed=true;post({type:'mapError',message:why});}}
+setTimeout(function(){if(!window.kakao||!kakao.maps||!kakao.maps.LatLng)fail('timeout');},10000);
+</script>
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(jsKey)}&autoload=false" onerror="fail('sdk')"></script>
+<script>
+if(window.kakao&&kakao.maps)kakao.maps.load(function(){
+  var map=new kakao.maps.Map(document.getElementById('map'),{center:new kakao.maps.LatLng(37.43,127.0),level:4});
+  var items=[];var points={};var pop=null;
+  function clear(){items.forEach(function(o){o.setMap(null);});items=[];points={};if(pop){pop.setMap(null);pop=null;}}
+  function dom(html){var el=document.createElement('div');el.innerHTML=html;return el.firstChild;}
+  function show(p){
+    if(pop)pop.setMap(null);
+    pop=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(p.lat,p.lng),content:'<div class="pop"><b>'+esc(p.name)+'</b><br>'+esc(p.detail)+' · '+p.distance+'m</div>',yAnchor:1,zIndex:5});
+    pop.setMap(map);
+  }
+  window.update=function(d){
+    clear();
+    if(d.center){var c=new kakao.maps.Circle({center:new kakao.maps.LatLng(d.center.lat,d.center.lng),radius:d.radius,strokeWeight:1,strokeColor:'#0E6560',fillColor:'#0E6560',fillOpacity:0.05});c.setMap(map);items.push(c);}
+    d.places.forEach(function(p){
+      var el=dom('<div class="pt" style="background:'+p.color+'"></div>');
+      el.addEventListener('click',function(){show(p);});
+      var o=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(p.lat,p.lng),content:el,zIndex:2});
+      o.setMap(map);items.push(o);points[p.id]=p;
+    });
+    d.complexes.forEach(function(c){
+      var el=dom('<div class="cx'+(c.selected?' on':'')+'">'+esc(c.name)+'</div>');
+      el.addEventListener('click',function(){post({type:'complex',number:c.number});});
+      var o=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(c.lat,c.lng),content:el,zIndex:3});
+      o.setMap(map);items.push(o);
+    });
+    if(d.fit&&d.center){map.setLevel(d.radius<=500?3:d.radius<=1000?5:6);map.setCenter(new kakao.maps.LatLng(d.center.lat,d.center.lng));}
+  };
+  window.focusPlace=function(id){var p=points[id];if(p){map.setLevel(2);map.setCenter(new kakao.maps.LatLng(p.lat,p.lng));show(p);}};
+  post({type:'ready'});
+});
+</script></body></html>`;
+
 export function MapScreen({ complexes, topPad, onClose }: Props) {
   const { width } = useWindowDimensions();
   const wide = width >= 900;
@@ -80,12 +141,21 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
   const [key, setKey] = useState<string>();
   const [keyInput, setKeyInput] = useState('');
   const [editKey, setEditKey] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
+  const [jsKey, setJsKey] = useState('');
+  const [jsInput, setJsInput] = useState('');
+  const [editJs, setEditJs] = useState(false);
+  const [mapErrorKey, setMapErrorKey] = useState<string>(); // 이 JavaScript 키로 카카오 지도를 못 불러옴
+  const [readyKind, setReadyKind] = useState<string>();
   const [result, setResult] = useState<{ request: string; places: Place[]; error?: string }>({ request: '', places: [] });
 
   useEffect(() => {
     loadKakaoKey().then(setKey);
+    loadKakaoJsKey().then(setJsKey);
   }, []);
+
+  const mapKind = jsKey && mapErrorKey !== jsKey ? `kakao:${jsKey}` : 'osm';
+  const mapReady = readyKind === mapKind;
+  const mapHtml = useMemo(() => (mapKind === 'osm' ? LEAFLET_HTML : kakaoHtml(jsKey)), [mapKind, jsKey]);
 
   const center = located.find((c) => c.number === selected);
   const request = center && key ? `${center.number}|${radius}|${cats.join(',')}|${key}` : '';
@@ -135,7 +205,8 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
   const onMessage = (e: WebViewMessageEvent) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
-      if (msg.type === 'ready') setMapReady(true);
+      if (msg.type === 'ready') setReadyKind(mapKind);
+      if (msg.type === 'mapError') setMapErrorKey(jsKey);
       if (msg.type === 'complex') setSelected(msg.number);
     } catch {
       // 무시
@@ -150,10 +221,56 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
     setEditKey(false);
   };
 
+  const saveJsKey = async () => {
+    await saveKakaoJsKey(jsInput);
+    setJsKey(cleanKakaoKey(jsInput));
+    setMapErrorKey(undefined);
+    setEditJs(false);
+  };
+
+  const jsBox = editJs ? (
+    <View style={styles.keyBox}>
+      <Text style={styles.keyTitle}>카카오 지도 JavaScript 키</Text>
+      <Text style={styles.keyHelp}>
+        카카오 개발자 콘솔 → 앱 → 플랫폼 키의 ‘JavaScript 키’를 붙여넣어 주세요. 그 JavaScript 키 설정(또는 플랫폼 → Web의 사이트
+        도메인)에 https://localhost 를 등록해야 지도가 떠요. 비워 두고 저장하면 기본 지도(OpenStreetMap)를 써요.
+      </Text>
+      <TextInput
+        style={styles.keyInput}
+        value={jsInput}
+        onChangeText={setJsInput}
+        placeholder="JavaScript 키"
+        placeholderTextColor={C.muted}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <Pressable style={styles.keyButton} onPress={saveJsKey}>
+        <Text style={styles.keyButtonText}>저장</Text>
+      </Pressable>
+      <Pressable onPress={() => setEditJs(false)}>
+        <Text style={styles.linkSmall}>취소</Text>
+      </Pressable>
+    </View>
+  ) : jsKey && mapErrorKey === jsKey ? (
+    <View style={styles.keyBox}>
+      <Text style={styles.error}>
+        카카오 지도를 불러오지 못해 기본 지도로 보여줘요. JavaScript 키가 맞는지, 그 키의 도메인에 https://localhost 가 등록돼 있는지
+        확인해 주세요.
+      </Text>
+      <Pressable onPress={() => setMapErrorKey(undefined)}>
+        <Text style={styles.link}>카카오 지도 다시 시도</Text>
+      </Pressable>
+      <Pressable onPress={() => { setJsInput(jsKey); setEditJs(true); }}>
+        <Text style={styles.link}>JavaScript 키 다시 입력</Text>
+      </Pressable>
+    </View>
+  ) : null;
+
   const needKey = key !== undefined && (!key || editKey);
 
   const list = (
     <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+      {jsBox}
       {needKey ? (
         <View style={styles.keyBox}>
           <Text style={styles.keyTitle}>카카오 REST API 키 입력</Text>
@@ -225,6 +342,11 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
           <Text style={styles.linkSmall}>카카오 키 바꾸기</Text>
         </Pressable>
       ) : null}
+      {!editJs ? (
+        <Pressable onPress={() => { setJsInput(jsKey); setEditJs(true); }}>
+          <Text style={styles.linkSmall}>{jsKey ? '지도 JavaScript 키 바꾸기' : '카카오 지도로 보기 (JavaScript 키 입력)'}</Text>
+        </Pressable>
+      ) : null}
     </ScrollView>
   );
 
@@ -265,9 +387,10 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
       <View style={wide ? styles.splitRow : styles.flex}>
         <View style={wide ? styles.mapWide : styles.map}>
           <WebView
+            key={mapKind}
             ref={web}
             originWhitelist={['*']}
-            source={{ html: MAP_HTML, baseUrl: 'https://localhost' }}
+            source={{ html: mapHtml, baseUrl: 'https://localhost' }}
             javaScriptEnabled
             onMessage={onMessage}
           />

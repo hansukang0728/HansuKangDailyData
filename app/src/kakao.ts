@@ -60,6 +60,25 @@ export const saveKakaoKey = async (key: string) => {
   }
 };
 
+// 지도용 JavaScript 키 (선택). 있으면 카카오 지도를 쓰고, 없으면 OpenStreetMap 지도를 쓴다
+const JS_KEY_STORAGE = 'kakaoJsKey/v1';
+
+export const loadKakaoJsKey = async () => {
+  try {
+    return (await AsyncStorage.getItem(JS_KEY_STORAGE)) ?? '';
+  } catch {
+    return '';
+  }
+};
+
+export const saveKakaoJsKey = async (key: string) => {
+  try {
+    await AsyncStorage.setItem(JS_KEY_STORAGE, cleanKakaoKey(key));
+  } catch {
+    // 무시
+  }
+};
+
 type Cache = Record<string, { at: number; places: Place[] }>;
 let memory: Cache | undefined;
 

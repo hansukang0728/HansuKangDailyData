@@ -54,10 +54,10 @@ WebView가 네이버 지도 페이지를 열고, 그 페이지 안에서 매물 
 - 기준가: 집주인 확인 중개사 가격 중 최저가(없으면 전체 최저가). 정렬·필터·가격변동 비교에 사용
 - 종료 매물은 "지우기"로 목록에서 숨기되 기록은 남겨 재등록 시 알아봄
 - 화면 너비 900 이상(태블릿)이면 왼쪽 목록 + 오른쪽 상세
-- 주변 지도: 필터 줄의 "주변 지도" → 목록의 단지들을 지도(Leaflet + CARTO/OSM 타일)에 표시하고,
+- 주변 지도: 필터 줄의 "주변 지도" → 목록의 단지들을 지도(카카오 JavaScript 키가 있으면 카카오 지도, 없으면 Leaflet + OpenStreetMap)에 표시하고,
   고른 단지 반경(500m·1km·2km) 안의 지하철·학교·학원·마트·병원·공원 등을 카카오 로컬 API로 찾아
   지도와 목록(거리·도보 분)으로 보여줌 (`app/src/MapScreen.tsx`, `app/src/kakao.ts`, 7일 캐시).
-  카카오 REST API 키는 앱에서 입력해 폰에만 저장 (저장소에 넣지 않음)
+  카카오 REST API 키는 앱에서 입력해 폰에만 저장 (저장소에 넣지 않음). 카카오 지도는 JavaScript 키와 도메인 https://localhost 등록 필요
 - 평면도: 카드의 면적·타입 배지를 누르면 `complex/pyeongGroups`·`complex/pyeong`·`complex/maintenanceFee`
   (front-api)로 타입 목록·평면도·관리비를 받아 앱 화면에 표시 (`app/src/complexInfo.ts`, 30일 캐시)
 - 필터: 단지, 전용 59–84㎡, 타입, 보증금(3~12억)·월세 상한, 집주인만 (`app/src/filters.ts`)
