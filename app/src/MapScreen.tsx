@@ -19,6 +19,8 @@ import { Chip } from './Chip';
 import {
   CATEGORIES,
   cleanKakaoKey,
+  distanceM,
+  findPlace,
   loadKakaoJsKey,
   loadKakaoKey,
   Place,
@@ -27,6 +29,7 @@ import {
   searchPlaces,
   walkMinutes,
 } from './kakao';
+import { GWACHEON, SHUTTLE, ShuttleDir } from './shuttle';
 import { C } from './theme';
 
 export interface MapComplex {
@@ -36,6 +39,8 @@ export interface MapComplex {
   lng?: number;
 }
 
+type ShuttleStopPlace = Pick<Place, 'id' | 'name' | 'lat' | 'lng' | 'url'> & { label: string; missing?: boolean };
+
 interface Props {
   complexes: MapComplex[];
   topPad: number;
@@ -43,7 +48,7 @@ interface Props {
 }
 
 const RADII = [500, 1000, 2000];
-const DEFAULT_CATEGORIES = ['subway', 'school', 'academy', 'mart', 'hospital', 'park'];
+const SHUTTLE_COLOR = '#1C1B19';
 
 const COMMON_JS = `
 function post(o){window.ReactNativeWebView.postMessage(JSON.stringify(o));}
@@ -53,13 +58,14 @@ const COMMON_CSS = `
 html,body,#map{margin:0;height:100%}
 .cx{background:#fff;border:2px solid #1C1B19;border-radius:12px;padding:2px 7px;font:700 12px sans-serif;color:#1C1B19;white-space:nowrap;display:inline-block}
 .cx.on{background:#0E6560;border-color:#0E6560;color:#fff}
+.st{width:22px;height:22px;border-radius:11px;background:#1C1B19;color:#fff;font:700 12px/22px sans-serif;text-align:center;border:2px solid #fff;box-shadow:0 0 2px rgba(0,0,0,.5)}
 `;
 
 // 키 없이 쓰는 지도: Leaflet + OpenStreetMap 타일
 const LEAFLET_HTML = `<!doctype html><html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
-<style>${COMMON_CSS}.cx{transform:translate(-50%,-50%)}</style></head><body><div id="map"></div>
+<style>${COMMON_CSS}.cx,.st{transform:translate(-50%,-50%)}</style></head><body><div id="map"></div>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>${COMMON_JS}
 var map=L.map('map').setView([37.43,127.0],15);
@@ -77,7 +83,16 @@ window.update=function(d){
     markers[p.id]=L.circleMarker([p.lat,p.lng],{radius:6,color:'#fff',weight:1.5,fillColor:p.color,fillOpacity:1})
       .bindPopup('<b>'+esc(p.name)+'</b><br>'+esc(p.detail)+' · '+p.distance+'m').addTo(layer);
   });
-  if(d.fit&&d.center){map.setView([d.center.lat,d.center.lng],d.radius<=500?16:d.radius<=1000?15:14);}
+  if(d.stops.length>1){L.polyline(d.stops.map(function(s){return [s.lat,s.lng];}),{color:'#1C1B19',weight:3,dashArray:'6 6'}).addTo(layer);}
+  d.stops.forEach(function(s,i){
+    markers[s.id]=L.marker([s.lat,s.lng],{icon:L.divIcon({className:'',html:'<div class="st">'+(i+1)+'</div>'}),zIndexOffset:900})
+      .bindPopup('<b>'+(i+1)+'. '+esc(s.label)+'</b><br>'+esc(s.name)).addTo(layer);
+  });
+  if(d.fit){
+    if(d.center){map.setView([d.center.lat,d.center.lng],d.radius<=500?16:d.radius<=1000?15:14);}
+    else{var pts=d.complexes.map(function(c){return [c.lat,c.lng];}).concat(d.stops.map(function(s){return [s.lat,s.lng];}));
+      if(pts.length){map.fitBounds(pts,{padding:[40,40],maxZoom:15});}}
+  }
 };
 window.focusPlace=function(id){var m=markers[id];if(m){map.setView(m.getLatLng(),17);m.openPopup();}};
 post({type:'ready'});
@@ -89,6 +104,7 @@ const kakaoHtml = (jsKey: string) => `<!doctype html><html><head>
 <style>${COMMON_CSS}
 .pt{width:12px;height:12px;border-radius:6px;border:1.5px solid #fff;box-shadow:0 0 2px rgba(0,0,0,.4)}
 .pop{background:#fff;border:1px solid #999;border-radius:8px;padding:5px 8px;font:12px sans-serif;color:#1C1B19;white-space:nowrap;margin-bottom:28px}
+.pop .m{color:#666}
 </style></head><body><div id="map"></div>
 <script>${COMMON_JS}
 var failed=false;
@@ -116,13 +132,26 @@ if(window.kakao&&kakao.maps)kakao.maps.load(function(){
       var o=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(p.lat,p.lng),content:el,zIndex:2});
       o.setMap(map);items.push(o);points[p.id]=p;
     });
+    if(d.stops.length>1){var line=new kakao.maps.Polyline({path:d.stops.map(function(s){return new kakao.maps.LatLng(s.lat,s.lng);}),strokeWeight:3,strokeColor:'#1C1B19',strokeStyle:'dash'});line.setMap(map);items.push(line);}
+    d.stops.forEach(function(s,i){
+      var sp={id:s.id,lat:s.lat,lng:s.lng,name:(i+1)+'. '+s.label,detail:s.name,distance:s.distance};
+      var el=dom('<div class="st">'+(i+1)+'</div>');
+      el.addEventListener('click',function(){show(sp);});
+      var o=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(s.lat,s.lng),content:el,zIndex:4});
+      o.setMap(map);items.push(o);points[s.id]=sp;
+    });
     d.complexes.forEach(function(c){
       var el=dom('<div class="cx'+(c.selected?' on':'')+'">'+esc(c.name)+'</div>');
       el.addEventListener('click',function(){post({type:'complex',number:c.number});});
       var o=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(c.lat,c.lng),content:el,zIndex:3});
       o.setMap(map);items.push(o);
     });
-    if(d.fit&&d.center){map.setLevel(d.radius<=500?3:d.radius<=1000?5:6);map.setCenter(new kakao.maps.LatLng(d.center.lat,d.center.lng));}
+    if(d.fit){
+      if(d.center){map.setLevel(d.radius<=500?3:d.radius<=1000?5:6);map.setCenter(new kakao.maps.LatLng(d.center.lat,d.center.lng));}
+      else{var b=new kakao.maps.LatLngBounds();var n=0;
+        d.complexes.concat(d.stops).forEach(function(x){b.extend(new kakao.maps.LatLng(x.lat,x.lng));n++;});
+        if(n>1)map.setBounds(b,40,40,40,40);else if(n===1){map.setLevel(4);map.setCenter(b.getCenter());}}
+    }
   };
   window.focusPlace=function(id){var p=points[id];if(p){map.setLevel(2);map.setCenter(new kakao.maps.LatLng(p.lat,p.lng));show(p);}};
   post({type:'ready'});
@@ -135,8 +164,14 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
   const web = useRef<WebView>(null);
 
   const located = useMemo(() => complexes.filter((c) => c.lat && c.lng), [complexes]);
-  const [selected, setSelected] = useState(located[0]?.number);
-  const [cats, setCats] = useState<string[]>(DEFAULT_CATEGORIES);
+  // 처음 들어오면 아무것도 고르지 않은 상태 (단지·시설·셔틀 모두)
+  const [selected, setSelected] = useState<string>();
+  const [cats, setCats] = useState<string[]>([]);
+  const [shuttle, setShuttle] = useState<ShuttleDir>();
+  const [stopsResult, setStopsResult] = useState<{ request: string; stops: ShuttleStopPlace[]; error?: string }>({
+    request: '',
+    stops: [],
+  });
   const [radius, setRadius] = useState(1000);
   const [key, setKey] = useState<string>();
   const [keyInput, setKeyInput] = useState('');
@@ -158,7 +193,7 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
   const mapHtml = useMemo(() => (mapKind === 'osm' ? LEAFLET_HTML : kakaoHtml(jsKey)), [mapKind, jsKey]);
 
   const center = located.find((c) => c.number === selected);
-  const request = center && key ? `${center.number}|${radius}|${cats.join(',')}|${key}` : '';
+  const request = center && key && cats.length ? `${center.number}|${radius}|${cats.join(',')}|${key}` : '';
   const loading = !!request && result.request !== request;
 
   // 고른 단지·카테고리·반경의 시설을 찾는다 (카테고리마다 한 번씩, 7일 캐시)
@@ -184,23 +219,57 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
   }, [request, center?.lat, center?.lng, key, cats, radius]);
 
   const places = useMemo(() => (result.request === request ? result.places : []), [result, request]);
+
+  // 셔틀 정류장 위치 찾기 (카카오 장소 검색, 30일 저장)
+  const stopsRequest = shuttle && key ? `${shuttle}|${key}` : '';
+  const stopsLoading = !!stopsRequest && stopsResult.request !== stopsRequest;
+  useEffect(() => {
+    if (!stopsRequest || !shuttle || !key) return;
+    let alive = true;
+    (async () => {
+      const stops: ShuttleStopPlace[] = [];
+      let error: string | undefined;
+      try {
+        for (const [i, st] of SHUTTLE[shuttle].stops.entries()) {
+          const p = await findPlace(key, st.query, GWACHEON.lat, GWACHEON.lng);
+          if (p) stops.push({ ...p, id: `stop:${i}`, label: st.label });
+          else stops.push({ id: `stop:${i}`, label: st.label, name: '위치를 못 찾음', lat: 0, lng: 0, url: '', missing: true });
+        }
+      } catch (e: any) {
+        error = e?.message ?? String(e);
+      }
+      if (alive) setStopsResult({ request: stopsRequest, stops, error });
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [stopsRequest, shuttle, key]);
+  const stops = useMemo(
+    () =>
+      (stopsResult.request === stopsRequest ? stopsResult.stops : []).map((st) => ({
+        ...st,
+        distance: center?.lat && center.lng && !st.missing ? distanceM(center.lat, center.lng, st.lat, st.lng) : undefined,
+      })),
+    [stopsResult, stopsRequest, center],
+  );
   const colorOf = useMemo(() => Object.fromEntries(CATEGORIES.map((c) => [c.id, c.color])), []);
 
   // 지도 다시 그리기
   const lastFit = useRef('');
   useEffect(() => {
     if (!mapReady) return;
-    const fitKey = `${selected}|${radius}`;
+    const fitKey = `${selected}|${radius}|${stops.length}`;
     const payload = {
       complexes: located.map((c) => ({ number: c.number, name: c.name, lat: c.lat, lng: c.lng, selected: c.number === selected })),
       center: center ? { lat: center.lat, lng: center.lng } : null,
       radius,
       places: places.map((p) => ({ ...p, color: colorOf[p.categoryId] })),
+      stops: stops.filter((st) => !st.missing),
       fit: lastFit.current !== fitKey,
     };
     lastFit.current = fitKey;
     web.current?.injectJavaScript(`window.update(${JSON.stringify(payload)});true;`);
-  }, [mapReady, located, selected, center, radius, places, colorOf]);
+  }, [mapReady, located, selected, center, radius, places, colorOf, stops]);
 
   const onMessage = (e: WebViewMessageEvent) => {
     try {
@@ -213,7 +282,7 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
     }
   };
 
-  const focus = (p: Place) => web.current?.injectJavaScript(`window.focusPlace(${JSON.stringify(p.id)});true;`);
+  const focus = (p: { id: string }) => web.current?.injectJavaScript(`window.focusPlace(${JSON.stringify(p.id)});true;`);
 
   const saveKey = async () => {
     await saveKakaoKey(keyInput);
@@ -275,7 +344,7 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
         <View style={styles.keyBox}>
           <Text style={styles.keyTitle}>카카오 REST API 키 입력</Text>
           <Text style={styles.keyHelp}>
-            developers.kakao.com → 내 애플리케이션 → 앱 추가 → 앱 키의 ‘REST API 키’를 붙여넣어 주세요. 키는 이 폰에만
+            developers.kakao.com → 앱 → 내 앱 → 플랫폼 키의 ‘REST API 키’를 붙여넣어 주세요. 키는 이 폰에만
             저장돼요. 오류가 나면 앱 설정의 제품 설정에서 ‘카카오맵’을 사용으로 켜 주세요.
           </Text>
           <TextInput
@@ -294,8 +363,57 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
             <Text style={styles.link}>카카오 개발자 사이트 열기</Text>
           </Pressable>
         </View>
-      ) : !located.length ? (
+      ) : null}
+      {!needKey && shuttle ? (
+        <View style={styles.group}>
+          <View style={styles.groupHead}>
+            <View style={[styles.dot, { backgroundColor: SHUTTLE_COLOR }]} />
+            <Text style={styles.groupTitle}>
+              회사 {SHUTTLE[shuttle].label}
+              {center ? ` · ${center.name}에서` : ''}
+            </Text>
+          </View>
+          {stopsLoading ? (
+            <ActivityIndicator color={C.accent} />
+          ) : stopsResult.error ? (
+            <Text style={styles.error}>{stopsResult.error}</Text>
+          ) : (
+            stops.map((st, i) => (
+              <Pressable
+                key={st.id}
+                style={styles.place}
+                onPress={() => !st.missing && focus(st)}
+                onLongPress={() => st.url && Linking.openURL(st.url)}
+              >
+                <Text style={styles.stopNo}>{i + 1}</Text>
+                <View style={styles.flex}>
+                  <Text style={styles.placeName} numberOfLines={1}>
+                    {st.label}
+                  </Text>
+                  <Text style={styles.placeMeta} numberOfLines={1}>
+                    카카오 위치: {st.name}
+                  </Text>
+                </View>
+                {st.distance !== undefined ? (
+                  <Text style={styles.placeDist}>
+                    {st.distance < 1000 ? `${st.distance}m` : `${(st.distance / 1000).toFixed(1)}km`}
+                    {'\n'}도보 약 {walkMinutes(st.distance * 1.3)}분
+                  </Text>
+                ) : null}
+              </Pressable>
+            ))
+          )}
+          {!center && !stopsLoading ? <Text style={styles.more}>단지를 고르면 정류장까지 거리가 나와요 (직선 거리 기준 어림)</Text> : null}
+        </View>
+      ) : null}
+      {needKey ? null : !located.length ? (
         <Text style={styles.message}>단지 위치가 아직 없어요. 목록에서 새로고침을 한 번 해 주세요.</Text>
+      ) : !center || !cats.length ? (
+        !shuttle ? (
+          <Text style={styles.message}>위에서 단지와 시설(지하철·학교·병원 등) 또는 셔틀을 골라 주세요.</Text>
+        ) : !center && cats.length ? (
+          <Text style={styles.message}>단지를 고르면 주변 시설을 보여줘요.</Text>
+        ) : null
       ) : loading ? (
         <ActivityIndicator style={styles.spinner} color={C.accent} />
       ) : result.error ? (
@@ -366,11 +484,14 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
             label={c.lat ? c.name : `${c.name} (위치 없음)`}
             variant="sort"
             on={c.number === selected}
-            onPress={() => c.lat && setSelected(c.number)}
+            onPress={() => c.lat && setSelected(c.number === selected ? undefined : c.number)}
           />
         ))}
       </ScrollView>
       <ScrollView horizontal style={styles.rowWrap} contentContainerStyle={styles.row} showsHorizontalScrollIndicator={false}>
+        {(Object.keys(SHUTTLE) as ShuttleDir[]).map((d) => (
+          <Chip key={d} label={SHUTTLE[d].label} variant="sort" on={shuttle === d} onPress={() => setShuttle(shuttle === d ? undefined : d)} />
+        ))}
         {RADII.map((r) => (
           <Chip key={r} label={r < 1000 ? `${r}m` : `${r / 1000}km`} on={radius === r} onPress={() => setRadius(r)} />
         ))}
@@ -432,6 +553,18 @@ const styles = StyleSheet.create({
   placeName: { fontSize: 14, fontWeight: '600', color: C.ink },
   placeMeta: { fontSize: 12, color: C.muted },
   placeDist: { fontSize: 12, color: C.body, textAlign: 'right' },
+  stopNo: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: SHUTTLE_COLOR,
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 24,
+    overflow: 'hidden',
+  },
   more: { fontSize: 12, color: C.muted, paddingLeft: 10 },
   message: { padding: 20, textAlign: 'center', color: C.muted },
   spinner: { marginTop: 24 },

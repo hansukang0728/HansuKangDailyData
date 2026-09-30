@@ -9,6 +9,9 @@ export interface Category {
   code?: string; // 카카오 카테고리 그룹 코드
   keyword?: string; // 카테고리 코드가 없는 시설은 키워드로 찾는다
   color: string;
+  // 카카오 분류(category_name, 예: "의료,건강 > 병원 > 소아청소년과")로 거르기
+  include?: RegExp;
+  exclude?: RegExp;
 }
 
 export const CATEGORIES: Category[] = [
@@ -18,9 +21,14 @@ export const CATEGORIES: Category[] = [
   { id: 'kinder', label: '어린이집·유치원', code: 'PS3', color: '#B7791F' },
   { id: 'mart', label: '마트', code: 'MT1', color: '#A1321F' },
   { id: 'convenience', label: '편의점', code: 'CS2', color: '#8A3E05' },
-  { id: 'hospital', label: '병원', code: 'HP8', color: '#C2185B' },
+  { id: 'hospital', label: '병원', code: 'HP8', exclude: /소아/, color: '#C2185B' },
+  { id: 'pediatric', label: '소아과', keyword: '소아청소년과', include: /소아/, color: '#E65100' },
   { id: 'pharmacy', label: '약국', code: 'PM9', color: '#6A1B9A' },
-  { id: 'park', label: '공원', keyword: '공원', color: '#2E7D32' },
+  // 키워드 검색은 이름에만 "공원"이 들어간 가게도 섞이므로, 분류에 공원이 있는 것만
+  { id: 'park', label: '공원', keyword: '공원', include: /공원/, color: '#2E7D32' },
+  { id: 'food', label: '음식점', code: 'FD6', color: '#AD1457' },
+  { id: 'sashimi', label: '횟집', keyword: '횟집', include: /(^|>)\s*회\s*($|>)|해물,생선/, color: '#0277BD' },
+  { id: 'meat', label: '고깃집', keyword: '고깃집', include: /육류|고기/, color: '#6D4C41' },
   { id: 'cafe', label: '카페', code: 'CE7', color: '#5D4037' },
   { id: 'bank', label: '은행', code: 'BK9', color: '#455A64' },
 ];
@@ -38,7 +46,7 @@ export interface Place {
 }
 
 const KEY_STORAGE = 'kakaoRestKey/v1';
-const CACHE_STORAGE = 'kakaoPlaces/v1';
+const CACHE_STORAGE = 'kakaoPlaces/v2'; // v2: 병원/소아과 분리
 const CACHE_TTL_MS = 7 * 86400_000;
 
 export const loadKakaoKey = async () => {
@@ -156,12 +164,41 @@ export async function searchPlaces(
     if (!res.ok) throw new Error(`카카오 API 오류 ${res.status}`);
     const body = await res.json();
     for (const d of body.documents ?? []) {
-      // 키워드 검색은 이름에만 "공원"이 들어간 가게도 섞이므로, 분류에 공원이 있는 것만
-      if (cat.keyword === '공원' && !String(d.category_name ?? '').includes('공원')) continue;
+      const catName = String(d.category_name ?? '');
+      if (cat.include && !cat.include.test(catName)) continue;
+      if (cat.exclude && cat.exclude.test(catName)) continue;
       places.push(toPlace(d, cat.id));
     }
     if (body.meta?.is_end !== false) break;
   }
   await writeCache({ ...(await readCache()), [cacheKey]: { at: Date.now(), places } });
   return places;
+}
+
+// 이름으로 장소 한 곳 찾기 (셔틀 정류장 등). 기준점에서 가까운 첫 결과, 30일 저장
+export async function findPlace(key: string, query: string, lat: number, lng: number): Promise<Place | null> {
+  const cacheKey = `find|${query}`;
+  const cache = await readCache();
+  const hit = cache[cacheKey];
+  if (hit && Date.now() - hit.at < 30 * 86400_000) return hit.places[0] ?? null;
+  const res = await fetch(
+    `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(query)}&x=${lng}&y=${lat}&radius=20000&sort=accuracy&size=5`,
+    { headers: { Authorization: `KakaoAK ${cleanKakaoKey(key)}` } },
+  );
+  if (!res.ok) throw new Error(`카카오 API 오류 ${res.status}`);
+  const body = await res.json();
+  const d = body.documents?.[0];
+  const place = d ? toPlace(d, 'shuttle') : null;
+  await writeCache({ ...(await readCache()), [cacheKey]: { at: Date.now(), places: place ? [place] : [] } });
+  return place;
+}
+
+// 두 좌표 사이 거리 (m, 직선)
+export function distanceM(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const r = 6371000;
+  const rad = Math.PI / 180;
+  const dLat = (bLat - aLat) * rad;
+  const dLng = (bLng - aLng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * r * Math.asin(Math.sqrt(h)));
 }
