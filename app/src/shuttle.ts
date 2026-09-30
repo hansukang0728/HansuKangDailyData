@@ -10,8 +10,8 @@ export const SHUTTLE: Record<ShuttleDir, { label: string; stops: ShuttleStop[] }
   in: {
     label: '셔틀 출근',
     stops: [
-      { label: '과천역 6번 출구', query: '과천역 6번출구' },
       { label: '과천청사역 7번 출구', query: '정부과천청사역 7번출구' },
+      { label: '과천역 6번 출구', query: '과천역 6번출구' },
       { label: '과천주공 9단지 904동', query: '과천주공9단지 904동' },
     ],
   },
