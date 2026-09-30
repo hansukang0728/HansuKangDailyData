@@ -107,13 +107,23 @@ const kakaoHtml = (jsKey: string) => `<!doctype html><html><head>
 .pop .m{color:#666}
 </style></head><body><div id="map"></div>
 <script>${COMMON_JS}
-var failed=false;
-function fail(why){if(!failed){failed=true;post({type:'mapError',message:why});}}
-setTimeout(function(){if(!window.kakao||!kakao.maps||!kakao.maps.LatLng)fail('timeout');},10000);
+var SDK='https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(jsKey)}&autoload=false';
+var failed=false,ready=false;
+// 왜 안 되는지 알 수 있게, 카카오가 SDK 요청에 뭐라고 답했는지(상태·본문 앞부분) 같이 보낸다
+function fail(why){
+  if(failed)return;failed=true;
+  fetch(SDK).then(function(r){return r.text().then(function(t){return r.status+' '+t.replace(/\\s+/g,' ').slice(0,160);});})
+    .catch(function(e){return 'fetch 실패 '+e;})
+    .then(function(info){post({type:'mapError',message:why+' | '+info+' | 페이지 주소 '+location.href});});
+}
+setTimeout(function(){if(!ready)fail('10초 안에 지도가 뜨지 않음');},10000);
+window.onerror=function(m){fail('스크립트 오류: '+m);};
 </script>
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(jsKey)}&autoload=false" onerror="fail('sdk')"></script>
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(jsKey)}&autoload=false" onerror="fail('SDK 불러오기 실패')"></script>
 <script>
-if(window.kakao&&kakao.maps)kakao.maps.load(function(){
+if(!window.kakao||!kakao.maps)fail('kakao.maps 없음');
+else kakao.maps.load(function(){
+  ready=true;
   var map=new kakao.maps.Map(document.getElementById('map'),{center:new kakao.maps.LatLng(37.43,127.0),level:4});
   var items=[];var points={};var pop=null;
   function clear(){items.forEach(function(o){o.setMap(null);});items=[];points={};if(pop){pop.setMap(null);pop=null;}}
@@ -180,6 +190,7 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
   const [jsInput, setJsInput] = useState('');
   const [editJs, setEditJs] = useState(false);
   const [mapErrorKey, setMapErrorKey] = useState<string>(); // 이 JavaScript 키로 카카오 지도를 못 불러옴
+  const [mapErrorWhy, setMapErrorWhy] = useState('');
   const [readyKind, setReadyKind] = useState<string>();
   const [result, setResult] = useState<{ request: string; places: Place[]; error?: string }>({ request: '', places: [] });
 
@@ -275,7 +286,10 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
       if (msg.type === 'ready') setReadyKind(mapKind);
-      if (msg.type === 'mapError') setMapErrorKey(jsKey);
+      if (msg.type === 'mapError') {
+        setMapErrorKey(jsKey);
+        setMapErrorWhy(String(msg.message ?? ''));
+      }
       if (msg.type === 'complex') setSelected(msg.number);
     } catch {
       // 무시
@@ -322,10 +336,16 @@ export function MapScreen({ complexes, topPad, onClose }: Props) {
     </View>
   ) : jsKey && mapErrorKey === jsKey ? (
     <View style={styles.keyBox}>
-      <Text style={styles.error}>
-        카카오 지도를 불러오지 못해 기본 지도로 보여줘요. JavaScript 키가 맞는지, 그 키의 도메인에 https://localhost 가 등록돼 있는지
-        확인해 주세요.
+      <Text style={styles.error}>카카오 지도를 불러오지 못해 기본 지도로 보여줘요.</Text>
+      <Text style={styles.keyHelp}>
+        카카오 콘솔에서 확인할 것: ① 플랫폼 키의 JavaScript 키가 맞는지 ② 그 앱의 플랫폼 → Web(또는 JavaScript 키의 허용 도메인)에
+        https://localhost 가 그대로(https:// 포함, 포트 없이) 등록돼 있는지 ③ 제품 설정에서 카카오맵이 켜져 있는지.
       </Text>
+      {mapErrorWhy ? (
+        <Text style={styles.errorDetail} selectable>
+          카카오 응답: {mapErrorWhy}
+        </Text>
+      ) : null}
       <Pressable onPress={() => setMapErrorKey(undefined)}>
         <Text style={styles.link}>카카오 지도 다시 시도</Text>
       </Pressable>
@@ -569,6 +589,7 @@ const styles = StyleSheet.create({
   message: { padding: 20, textAlign: 'center', color: C.muted },
   spinner: { marginTop: 24 },
   error: { fontSize: 13, color: C.error, fontWeight: '600' },
+  errorDetail: { fontSize: 11, lineHeight: 15, color: C.muted },
   keyBox: { gap: 10, padding: 14, borderRadius: 14, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line },
   keyTitle: { fontSize: 15, fontWeight: '700', color: C.ink },
   keyHelp: { fontSize: 13, lineHeight: 19, color: C.body },
