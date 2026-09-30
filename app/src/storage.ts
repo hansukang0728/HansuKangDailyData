@@ -1,4 +1,4 @@
-// 관심 목록별 조회 기록(집 단위)·필터·즐겨찾기와 목록 설정을 폰에 저장한다.
+// 관심 목록별 조회 기록(집 단위)·필터·즐겨찾기·메모와 목록 설정을 폰에 저장한다.
 // 목록이 생기기 전(빌드 #12까지)에 저장한 데이터는 과천 목록 것으로 옮겨 온다.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -11,6 +11,7 @@ const RESULT_KEY = 'result/v2';
 const LEGACY_RESULT_KEY = 'result/v1';
 const FILTERS_KEY = 'filters/v1';
 const FAVORITES_KEY = 'favorites/v1';
+const NOTES_KEY = 'notes/v1'; // 매물별 메모 (집 id → 글)
 const PROFILES_KEY = 'profiles/v1';
 const ACTIVE_PROFILE_KEY = 'activeProfile/v1';
 
@@ -73,6 +74,8 @@ export const loadFilters = (profileId: string) => loadFor<Filters>(FILTERS_KEY, 
 export const saveFilters = (profileId: string, f: Filters) => save(keyOf(FILTERS_KEY, profileId), f);
 export const loadFavorites = (profileId: string) => loadFor<string[]>(FAVORITES_KEY, profileId);
 export const saveFavorites = (profileId: string, ids: string[]) => save(keyOf(FAVORITES_KEY, profileId), ids);
+export const loadNotes = (profileId: string) => loadFor<Record<string, string>>(NOTES_KEY, profileId);
+export const saveNotes = (profileId: string, notes: Record<string, string>) => save(keyOf(NOTES_KEY, profileId), notes);
 
 export async function loadProfiles(): Promise<Profile[]> {
   const saved = await load<Profile[]>(PROFILES_KEY);
@@ -85,7 +88,7 @@ export const saveActiveProfile = (id: string) => save(ACTIVE_PROFILE_KEY, id);
 // 목록을 지울 때 그 목록의 저장 데이터도 지운다
 export async function removeProfileData(profileId: string): Promise<void> {
   try {
-    await AsyncStorage.multiRemove([RESULT_KEY, FILTERS_KEY, FAVORITES_KEY].map((b) => keyOf(b, profileId)));
+    await AsyncStorage.multiRemove([RESULT_KEY, FILTERS_KEY, FAVORITES_KEY, NOTES_KEY].map((b) => keyOf(b, profileId)));
   } catch {
     // 무시
   }

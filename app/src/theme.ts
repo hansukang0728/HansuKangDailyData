@@ -15,6 +15,9 @@ export const C = {
   error: '#A1321F',
   ownerBg: '#EEE8F8',
   ownerText: '#4B2D86',
+  noteBg: '#FFF8E6',
+  noteLine: '#EAD9A8',
+  noteText: '#7A5A0A',
 };
 
 export const chips = StyleSheet.create({

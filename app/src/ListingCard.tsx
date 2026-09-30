@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { areaLabel, articleUrl, complexUrl, formatPrice } from './listing';
 import { C } from './theme';
@@ -13,6 +13,8 @@ interface Props {
   selected?: boolean; // 태블릿에서 오른쪽에 보고 있는 매물
   onToggle: () => void;
   onToggleFav: () => void;
+  note?: string; // 이 매물에 적어 둔 메모 (부동산 통화 내용 등)
+  onChangeNote?: (text: string) => void;
   onHide: () => void;
   onOpenPage: (url: string, title: string) => void;
   onOpenFloorPlan: () => void;
@@ -32,7 +34,7 @@ function historyText(e: HistoryEvent): string {
   return e.type === 'ended' ? label : `${label} · ${e.kind} ${price}`;
 }
 
-export function ListingCard({ house, status, fav, open, selected, onToggle, onToggleFav, onHide, onOpenPage, onOpenFloorPlan, ownerOnly, onShareRaw }: Props) {
+export function ListingCard({ house, status, fav, open, selected, onToggle, onToggleFav, onHide, onOpenPage, onOpenFloorPlan, ownerOnly, onShareRaw, note = '', onChangeNote }: Props) {
   const l = house.listing;
   const [showAllBrokers, setShowAllBrokers] = useState(false);
   const ownerArticles = l.brokerArticles.filter((b) => b.owner);
@@ -105,6 +107,21 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
       </Text>
       {open ? (
         <View style={styles.brokerList}>
+          {onChangeNote ? (
+            <View style={styles.noteBox}>
+              <Text style={styles.brokerHeading}>메모</Text>
+              <TextInput
+                style={styles.noteInput}
+                value={note}
+                onChangeText={onChangeNote}
+                placeholder="부동산에 물어본 내용, 입주 가능일, 협의 가능 여부 등을 적어 두세요"
+                placeholderTextColor={C.muted}
+                multiline
+                textAlignVertical="top"
+              />
+              <Text style={styles.noteHint}>쓰는 대로 이 폰에 저장돼요</Text>
+            </View>
+          ) : null}
           <Pressable
             style={styles.complexButton}
             onPress={() => onOpenPage(complexUrl(l.complexNumber), `${l.complexName || '단지'} 정보`)}
@@ -166,6 +183,11 @@ export function ListingCard({ house, status, fav, open, selected, onToggle, onTo
         </View>
       ) : (
         <>
+          {note.trim() ? (
+            <Text style={styles.notePreview} numberOfLines={2}>
+              메모: {note.trim()}
+            </Text>
+          ) : null}
           {summaryFeature ? (
             <Text style={styles.feature} numberOfLines={2}>
               {summaryFeature}
@@ -213,6 +235,10 @@ const styles = StyleSheet.create({
   brokerPrice: { fontSize: 14, fontWeight: '700', color: C.body },
   brokerPriceLow: { color: C.accent },
   prevPrice: { fontSize: 13, color: C.muted, textDecorationLine: 'line-through' },
+  noteBox: { gap: 6, padding: 10, borderRadius: 10, backgroundColor: C.noteBg, borderWidth: 1, borderColor: C.noteLine },
+  noteInput: { minHeight: 88, padding: 10, borderRadius: 8, backgroundColor: C.surface, borderWidth: 1, borderColor: C.noteLine, fontSize: 14, lineHeight: 20, color: C.ink },
+  noteHint: { fontSize: 11, color: C.muted },
+  notePreview: { fontSize: 13, lineHeight: 19, fontWeight: '600', color: C.noteText, marginTop: 2 },
   history: { gap: 4, padding: 10, borderRadius: 10, backgroundColor: C.ground },
   historyRow: { flexDirection: 'row', gap: 10 },
   historyWhen: { fontSize: 12, color: C.muted, width: 92 },

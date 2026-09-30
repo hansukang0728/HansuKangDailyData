@@ -27,12 +27,14 @@ import { ProfileManager } from './src/ProfileManager';
 import {
   loadActiveProfile,
   loadFavorites,
+  loadNotes,
   loadFilters,
   loadProfiles,
   loadResult,
   removeProfileData,
   saveActiveProfile,
   saveFavorites,
+  saveNotes,
   saveFilters,
   saveProfiles,
   saveResult,
@@ -88,6 +90,7 @@ export default function App() {
   const [complexFetchedAt, setComplexFetchedAt] = useState<Record<string, string>>({});
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [notes, setNotes] = useState<Record<string, string>>({}); // 집 id → 메모
   const [loaded, setLoaded] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [tab, setTab] = useState<Tab>('전체');
@@ -120,10 +123,11 @@ export default function App() {
     if (!profilesLoaded) return;
     let alive = true;
     (async () => {
-      const [saved, savedFilters, savedFavs] = await Promise.all([
+      const [saved, savedFilters, savedFavs, savedNotes] = await Promise.all([
         loadResult(profileId),
         loadFilters(profileId),
         loadFavorites(profileId),
+        loadNotes(profileId),
       ]);
       if (!alive) return;
       setHouses(saved?.houses ?? []);
@@ -134,6 +138,7 @@ export default function App() {
       const types = (savedFilters?.types ?? []).filter((t) => /^\d+$/.test(t));
       setFilters({ ...DEFAULT_FILTERS, ...savedFilters, types });
       setFavorites(savedFavs ?? []);
+      setNotes(savedNotes ?? {});
       setLoaded(true);
     })();
     return () => {
@@ -148,6 +153,10 @@ export default function App() {
   useEffect(() => {
     if (loaded) saveFavorites(profileId, favorites);
   }, [favorites, loaded, profileId]);
+
+  useEffect(() => {
+    if (loaded) saveNotes(profileId, notes);
+  }, [notes, loaded, profileId]);
 
   const profile = profiles.find((p) => p.id === profileId) ?? profiles[0];
   const complexes = profile.complexes;
@@ -168,6 +177,7 @@ export default function App() {
     setComplexFetchedAt({});
     setFilters(DEFAULT_FILTERS);
     setFavorites([]);
+    setNotes({});
     setRawByComplex({});
     setErrors([]);
     setExpanded({});
@@ -348,6 +358,13 @@ export default function App() {
     setBusy(false);
   };
 
+  const setNote = (id: string, text: string) => {
+    const next = { ...notes };
+    if (text.trim()) next[id] = text;
+    else delete next[id];
+    setNotes(next);
+  };
+
   const toggleFav = (id: string) =>
     setFavorites(favorites.includes(id) ? favorites.filter((f) => f !== id) : [...favorites, id]);
 
@@ -387,6 +404,8 @@ export default function App() {
       selected={split && !inDetail && selected?.id === h.id}
       onToggle={() => (split ? setSelectedId(h.id) : setExpanded({ ...expanded, [h.id]: !expanded[h.id] }))}
       onToggleFav={() => toggleFav(h.id)}
+      note={notes[h.id] ?? ''}
+      onChangeNote={(t) => setNote(h.id, t)}
       onHide={() => hideWhere((x) => x.id === h.id)}
       onOpenPage={(url, title) => setViewer({ url, title })}
       onOpenFloorPlan={() => setFloorPlanFor(h.listing)}
