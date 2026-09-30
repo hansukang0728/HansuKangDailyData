@@ -7,7 +7,8 @@ export interface Category {
   id: string;
   label: string;
   code?: string; // 카카오 카테고리 그룹 코드
-  keyword?: string; // 카테고리 코드가 없는 시설은 키워드로 찾는다
+  keyword?: string; // 키워드로도 찾는다 (코드와 같이 쓰면 두 결과를 합침)
+  keywords?: string[]; // 여러 키워드로 찾아 합칠 때
   color: string;
   // 카카오 분류(category_name, 예: "의료,건강 > 병원 > 소아청소년과")로 거르기
   include?: RegExp;
@@ -22,7 +23,8 @@ export const CATEGORIES: Category[] = [
   { id: 'mart', label: '마트', code: 'MT1', color: '#A1321F' },
   { id: 'convenience', label: '편의점', code: 'CS2', color: '#8A3E05' },
   { id: 'hospital', label: '병원', code: 'HP8', exclude: /소아/, color: '#C2185B' },
-  { id: 'pediatric', label: '소아과', keyword: '소아청소년과', include: /소아/, color: '#E65100' },
+  // 소아과: 병원 코드 검색 + 여러 키워드 검색을 합친다 (이름이 "○○소아과"인 곳은 소아청소년과 키워드로 안 잡힘)
+  { id: 'pediatric', label: '소아과', code: 'HP8', keywords: ['소아과', '소아청소년과'], include: /소아/, color: '#E65100' },
   { id: 'pharmacy', label: '약국', code: 'PM9', color: '#6A1B9A' },
   // 키워드 검색은 이름에만 "공원"이 들어간 가게도 섞이므로, 분류에 공원이 있는 것만
   { id: 'park', label: '공원', keyword: '공원', include: /공원/, color: '#2E7D32' },
@@ -46,7 +48,7 @@ export interface Place {
 }
 
 const KEY_STORAGE = 'kakaoRestKey/v1';
-const CACHE_STORAGE = 'kakaoPlaces/v2'; // v2: 병원/소아과 분리
+const CACHE_STORAGE = 'kakaoPlaces/v3'; // v3: 소아과 검색 보강, 페이지 확대
 const CACHE_TTL_MS = 7 * 86400_000;
 
 export const loadKakaoKey = async () => {
@@ -127,24 +129,10 @@ function toPlace(d: any, categoryId: string): Place {
   };
 }
 
-// 한 카테고리의 반경 내 시설 (가까운 순, 최대 45곳). 7일 동안 폰에 저장해 두고 쓴다
-export async function searchPlaces(
-  key: string,
-  cat: Category,
-  lat: number,
-  lng: number,
-  radius: number,
-): Promise<Place[]> {
-  const cacheKey = `${cat.id}|${lat.toFixed(5)}|${lng.toFixed(5)}|${radius}`;
-  const cache = await readCache();
-  const hit = cache[cacheKey];
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.places;
-
-  const base = cat.code
-    ? `https://dapi.kakao.com/v2/local/search/category.json?category_group_code=${cat.code}`
-    : `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(cat.keyword ?? '')}`;
-  const places: Place[] = [];
-  for (let page = 1; page <= 3; page++) {
+// 한 검색(카테고리 코드 또는 키워드)의 반경 내 결과. 가까운 순, 최대 10쪽(150곳)
+async function fetchAll(key: string, base: string, lat: number, lng: number, radius: number): Promise<any[]> {
+  const docs: any[] = [];
+  for (let page = 1; page <= 10; page++) {
     const res = await fetch(`${base}&x=${lng}&y=${lat}&radius=${radius}&sort=distance&size=15&page=${page}`, {
       headers: { Authorization: `KakaoAK ${cleanKakaoKey(key)}` },
     });
@@ -163,14 +151,44 @@ export async function searchPlaces(
     }
     if (!res.ok) throw new Error(`카카오 API 오류 ${res.status}`);
     const body = await res.json();
-    for (const d of body.documents ?? []) {
+    docs.push(...(body.documents ?? []));
+    if (body.meta?.is_end !== false) break;
+  }
+  return docs;
+}
+
+// 한 카테고리의 반경 내 시설: 코드 검색과 키워드 검색 결과를 합쳐 가까운 순으로. 7일 동안 폰에 저장해 두고 쓴다
+export async function searchPlaces(
+  key: string,
+  cat: Category,
+  lat: number,
+  lng: number,
+  radius: number,
+): Promise<Place[]> {
+  const cacheKey = `${cat.id}|${lat.toFixed(5)}|${lng.toFixed(5)}|${radius}`;
+  const cache = await readCache();
+  const hit = cache[cacheKey];
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.places;
+
+  const bases: string[] = [];
+  if (cat.code) bases.push(`https://dapi.kakao.com/v2/local/search/category.json?category_group_code=${cat.code}`);
+  for (const k of [cat.keyword, ...(cat.keywords ?? [])].filter(Boolean) as string[]) {
+    bases.push(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(k)}`);
+  }
+  const seen = new Set<string>();
+  const places: Place[] = [];
+  for (const base of bases) {
+    for (const d of await fetchAll(key, base, lat, lng, radius)) {
+      const id = String(d.id);
+      if (seen.has(id)) continue;
       const catName = String(d.category_name ?? '');
       if (cat.include && !cat.include.test(catName)) continue;
       if (cat.exclude && cat.exclude.test(catName)) continue;
+      seen.add(id);
       places.push(toPlace(d, cat.id));
     }
-    if (body.meta?.is_end !== false) break;
   }
+  places.sort((a, b) => a.distance - b.distance);
   await writeCache({ ...(await readCache()), [cacheKey]: { at: Date.now(), places } });
   return places;
 }
