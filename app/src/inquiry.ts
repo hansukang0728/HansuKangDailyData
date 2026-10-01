@@ -1,6 +1,6 @@
 // 부동산 문의 기록 양식: 매물마다 전화로 물어본 내용을 칩(라디오)으로 골라 채운다.
 // 값은 전부 문자열(여러 개 선택은 문자열 배열)로 두고, 필드 키로 저장한다.
-import { Listing, TradeKind } from './listing';
+import { formatPrice, Listing, TradeKind } from './listing';
 
 export type Inquiry = Record<string, string | string[] | undefined>;
 
@@ -186,7 +186,12 @@ export function summarize(v: Inquiry | undefined, kind: TradeKind): string {
 // 카톡 등에 붙일 전체 텍스트
 export function exportText(l: Listing, v: Inquiry | undefined, kind: TradeKind): string {
   const head = `${[l.complexName, l.dong && `${l.dong}동`, l.floor].filter(Boolean).join(' ')} · 전용 ${Math.floor(l.exclusiveSpace)}㎡ ${l.typeName ? `${l.typeName}타입` : ''}`.trim();
-  const lines = [head];
+  // 제목 아래 금액: 전세 "전세 3억 5,000", 월세 "월세 1억 / 120". 중개사마다 다르면 범위도
+  let price = `${kind} ${formatPrice(l)}`;
+  if (l.priceVaries && l.priceMin && l.priceMax) {
+    price += ` (중개사별 ${formatPrice({ ...l, ...l.priceMin })} ~ ${formatPrice({ ...l, ...l.priceMax })})`;
+  }
+  const lines = [head, price];
   if (!v) return lines.join('\n');
   for (const s of sectionsFor(kind)) {
     const rows: string[] = [];
