@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from './Chip';
-import { DEFAULT_FILTERS, DEPOSIT_OPTIONS, Filters, RENT_OPTIONS, STATUS_LABELS, StatusFilter, toggle } from './filters';
+import { AREA_OPTIONS, DEFAULT_FILTERS, DEPOSIT_OPTIONS, Filters, RENT_OPTIONS, STATUS_LABELS, StatusFilter, toggle } from './filters';
 import { C } from './theme';
 
 interface Props {
@@ -29,7 +29,15 @@ export function FilterPanel({ filters: f, onChange, complexes, types, ownerCount
         ))}
       </Section>
       <Section title="평형 (전용)">
-        <Chip label="전용 59–84㎡" on={f.targetArea} onPress={() => set({ targetArea: !f.targetArea, types: [] })} />
+        {AREA_OPTIONS.map(([max, label]) => (
+          <Chip
+            key={max}
+            label={label}
+            on={f.targetArea && (f.areaMax ?? 85) === max}
+            onPress={() => set({ targetArea: true, areaMax: max, types: [] })}
+          />
+        ))}
+        <Chip label="전체" on={!f.targetArea} onPress={() => set({ targetArea: false, types: [] })} />
         {types.map((t) => (
           <Chip
             key={t.key}

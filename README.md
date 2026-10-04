@@ -64,7 +64,7 @@ WebView가 네이버 지도 페이지를 열고, 그 페이지 안에서 매물 
   집 id가 기기마다 다를 수 있어 매물번호가 겹치는 집으로 맞춤. 신규/가격변동 판정 기록은 기기마다 따로. 주소·코드는 폰에만 저장
 - 평면도: 카드의 면적·타입 배지를 누르면 `complex/pyeongGroups`·`complex/pyeong`·`complex/maintenanceFee`
   (front-api)로 타입 목록·평면도·관리비를 받아 앱 화면에 표시 (`app/src/complexInfo.ts`, 30일 캐시)
-- 필터: 단지, 전용 59–84㎡, 타입, 보증금(3~12억)·월세 상한, 집주인만 (`app/src/filters.ts`)
+- 필터: 단지, 전용 59–84㎡ / 59–114㎡ / 전체, 타입, 보증금(3~12억)·월세 상한, 집주인만 (`app/src/filters.ts`)
 - `app/src/NaverBridge.tsx`: WebView 수집기, `app/src/listing.ts`: 응답 해석·정렬
 - "원본 데이터" 화면에서 네이버 응답 원본을 보고 공유할 수 있음 (필드 확인용)
 - APK 빌드: `app/**`가 바뀌어 푸시되면 `.github/workflows/android-apk.yml`이 빌드해서

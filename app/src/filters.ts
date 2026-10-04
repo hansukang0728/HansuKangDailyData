@@ -6,7 +6,8 @@ export const STATUS_LABELS: Record<StatusFilter, string> = { new: '신규', chan
 
 export interface Filters {
   complexes: string[]; // 비어 있으면 전체
-  targetArea: boolean; // 전용 59–84㎡만
+  targetArea: boolean; // 전용 59㎡ 이상 areaMax 미만만
+  areaMax: number; // 85(84㎡까지) 또는 115(114㎡까지). 이전 저장본에는 없을 수 있다
   types: string[]; // 대표 평형(전용면적 정수, 예: "84") 목록, 비어 있으면 전체
   depositMax: number | null; // 원
   rentMax: number | null; // 원 (월세에만 적용)
@@ -17,6 +18,7 @@ export interface Filters {
 export const DEFAULT_FILTERS: Filters = {
   complexes: [],
   targetArea: true,
+  areaMax: 85,
   types: [],
   depositMax: null,
   rentMax: null,
@@ -47,7 +49,7 @@ export const RENT_OPTIONS: [number | null, string][] = [
 
 export function matches(l: Listing, f: Filters): boolean {
   if (f.complexes.length && !f.complexes.includes(l.complexNumber)) return false;
-  if (f.targetArea && !inTargetArea(l)) return false;
+  if (f.targetArea && !inTargetArea(l, f.areaMax ?? 85)) return false;
   if (f.types.length && !f.types.includes(typeKey(l))) return false;
   if (f.depositMax !== null && l.deposit > f.depositMax) return false;
   if (f.rentMax !== null && l.kind === '월세' && l.rent > f.rentMax) return false;
@@ -56,10 +58,14 @@ export function matches(l: Listing, f: Filters): boolean {
 }
 
 // 필터 버튼에 보여줄 켜진 조건 수 (기본값인 59–84㎡는 세지 않음)
+export const AREA_OPTIONS: [number, string][] = [
+  [85, '전용 59–84㎡'],
+  [115, '전용 59–114㎡'],
+];
 export function activeCount(f: Filters): number {
   return (
     (f.complexes.length ? 1 : 0) +
-    (f.targetArea ? 0 : 1) +
+    (f.targetArea && (f.areaMax ?? 85) === 85 ? 0 : 1) +
     (f.types.length ? 1 : 0) +
     (f.depositMax !== null ? 1 : 0) +
     (f.rentMax !== null ? 1 : 0) +

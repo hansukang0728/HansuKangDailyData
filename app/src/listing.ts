@@ -186,9 +186,9 @@ export function sortListings(list: Listing[], key: SortKey): Listing[] {
   return [...list].sort((a, b) => compareListings(a, b, key));
 }
 
-// 전용 59~84㎡ 타입: 84.99㎡까지 포함
-export function inTargetArea(l: Listing): boolean {
-  return l.exclusiveSpace >= 59 && l.exclusiveSpace < 85;
+// 전용 59㎡부터 상한(미포함)까지. 기본 85 → 84.99㎡까지, 115 → 114.99㎡까지
+export function inTargetArea(l: Listing, areaMax = 85): boolean {
+  return l.exclusiveSpace >= 59 && l.exclusiveSpace < areaMax;
 }
 
 // 네이버 부동산 매물 페이지 주소
